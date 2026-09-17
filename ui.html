@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>System Design</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:#0b0e14;color:#e6e6e6;padding:1rem;line-height:1.5;font-size:.86rem}
+h1{font-size:1.05rem;margin-bottom:.15rem}
+.sub{color:#8b93a7;font-size:.8rem;margin-bottom:.9rem}
+.topbar{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;background:#10151f;border:1px solid #232a3a;border-radius:8px;padding:.7rem .9rem;margin-bottom:.8rem}
+.topbar label{color:#8b93a7;font-size:.8rem}
+select,input[type=text],textarea{background:#0b0e14;border:1px solid #2b3345;border-radius:6px;color:#e6e6e6;padding:.45rem;font-size:.84rem}
+select{max-width:280px}
+textarea{width:100%;min-height:64px;resize:vertical}
+button{background:#1d4ed8;border:0;border-radius:6px;color:#fff;padding:.45rem .8rem;cursor:pointer;font-size:.82rem}
+button:hover{background:#2563eb}
+button:disabled{opacity:.45;cursor:default}
+button.ghost{background:transparent;border:1px solid #3b4458;color:#c7ccd9}
+button.danger{background:transparent;border:1px solid #7f1d1d;color:#f87171}
+button.sm{padding:.28rem .55rem;font-size:.75rem}
+button.warn{background:transparent;border:1px solid #92600a;color:#fbbf24}
+.tabs{display:flex;gap:.5rem;margin-bottom:.8rem;flex-wrap:wrap}
+.tab{background:#10151f;border:1px solid #232a3a;border-radius:6px;padding:.4rem .8rem;cursor:pointer;font-size:.82rem;color:#c7ccd9}
+.tab.active{background:#1e3a5f;border-color:#3b82f6;color:#93c5fd}
+.card{background:#10151f;border:1px solid #232a3a;border-radius:8px;padding:.9rem;margin-bottom:.8rem}
+.card h2{font-size:.92rem;color:#93c5fd;margin-bottom:.6rem}
+.card h3{font-size:.84rem;color:#c7ccd9;margin:.8rem 0 .4rem}
+table{width:100%;border-collapse:collapse;font-size:.8rem}
+th,td{text-align:left;padding:.4rem .5rem;border-bottom:1px solid #232a3a;vertical-align:top}
+th{color:#8b93a7;font-weight:500}
+.tag{display:inline-block;background:#1e3a5f;border:1px solid #3b82f6;border-radius:10px;padding:.08rem .5rem;font-size:.72rem;color:#93c5fd;margin:.08rem}
+.tag.locked{background:#3a1b1b;border-color:#7f1d1d;color:#f87171}
+.tag.ok{background:#14532d;border-color:#1f7a33;color:#7ddf9b}
+.tag.dim{background:#1a1a2e;border-color:#4a4a6a;color:#a0a0c0}
+.cols3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.7rem}
+@media(max-width:900px){.cols3{grid-template-columns:1fr}}
+.col{background:#0d1220;border:1px solid #232a3a;border-radius:8px;padding:.6rem;min-height:120px}
+.col h3{margin-top:0;display:flex;justify-content:space-between;align-items:center}
+.task{background:#131a2b;border:1px solid #2b3345;border-radius:6px;padding:.5rem;margin-bottom:.5rem}
+.task .t{font-weight:600}
+.muted{color:#8b93a7;font-size:.78rem}
+.row{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
+.row>*{flex:1 1 auto}
+.row .grow{flex:3 1 auto}
+.frm{display:grid;gap:.5rem;margin:.6rem 0}
+.frm label{color:#8b93a7;font-size:.78rem}
+#msg{font-size:.82rem;margin:.5rem 0;min-height:1.2em}
+#msg.ok{color:#7ddf9b}#msg.err{color:#f87171}
+.badge{background:#7f1d1d;border-radius:999px;padding:.05rem .45rem;font-size:.72rem;margin-left:.3rem}
+details{margin:.4rem 0}
+summary{cursor:pointer;color:#93c5fd;font-size:.8rem}
+.comment{border-left:2px solid #3b82f6;padding:.25rem .5rem;margin:.35rem 0;background:#0d1424;border-radius:0 6px 6px 0}
+.comment .who{color:#93c5fd;font-size:.75rem}
+.comment .txt{white-space:pre-wrap}
+iframe.preview{width:100%;height:220px;border:1px solid #2b3345;border-radius:6px;background:#fff}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:center;justify-content:center;padding:1rem;z-index:50}
+.modal.open{display:flex}
+.modal .box{background:#10151f;border:1px solid #3b82f6;border-radius:10px;max-width:900px;width:100%;max-height:92vh;overflow:auto;padding:1rem}
+#grapes-host{min-height:420px;background:#fff;border-radius:6px}
+.hint{font-size:.76rem;color:#8b93a7}
+.mono{font-family:ui-monospace,monospace}
+</style>
+</head>
+<body>
+<h1>System Design</h1>
+<div class="sub">Projeto conceitual, sprint, páginas e tabelas. O chat propõe mudanças — você aprova. Cadeado 🔒 impede o sistema de alterar.</div>
+
+<div class="topbar">
+  <label for="project">Projeto:</label>
+  <select id="project"><option value="">Carregando projetos...</option></select>
+  <button id="btn-reload" class="ghost sm">Recarregar</button>
+  <span class="muted" id="proj-meta"></span>
+  <span style="flex:1"></span>
+  <span class="muted">Propostas pendentes: <strong id="pending-count">0</strong></span>
+</div>
+
+<div class="card" id="inbox-card">
+  <h2>Inbox de propostas do chat <span class="hint">(toda edição do chat precisa da sua aprovação)</span></h2>
+  <div id="inbox"><span class="muted">Selecione um projeto.</span></div>
+</div>
+
+<div class="tabs" id="tabs">
+  <button class="tab active" data-tab="concept">Projeto conceitual</button>
+  <button class="tab" data-tab="sprint">Sprint</button>
+  <button class="tab" data-tab="pages">Páginas</button>
+  <button class="tab" data-tab="tables">Tabelas</button>
+</div>
+
+<div id="msg"></div>
+
+<section id="tab-concept" class="tabpanel">
+  <div class="card">
+    <h2>Visão do sistema</h2>
+    <div class="frm">
+      <label>Objetivo<textarea id="v-objective" maxlength="5000"></textarea></label>
+      <label>Público-alvo<textarea id="v-audience" maxlength="5000"></textarea></label>
+      <label>Escopo<textarea id="v-scope" maxlength="5000"></textarea></label>
+      <label>Não-objetivos<textarea id="v-nongoals" maxlength="5000"></textarea></label>
+    </div>
+    <div class="row"><button id="btn-vision">Salvar visão</button><span class="muted" id="vision-meta"></span></div>
+  </div>
+  <div class="card">
+    <h2>Elementos conceituais <span class="hint">(interface, páginas, funções, algoritmos)</span></h2>
+    <div class="row" style="margin-bottom:.5rem">
+      <select id="f-kind"><option value="">Todos os tipos</option><option value="interface">interface</option><option value="page">page</option><option value="function">function</option><option value="algorithm">algorithm</option></select>
+      <input type="text" id="f-search" class="grow" placeholder="Buscar..." maxlength="120">
+    </div>
+    <div id="concept-list"></div>
+    <h3>Novo elemento</h3>
+    <div class="frm">
+      <div class="row">
+        <select id="n-kind"><option value="interface">interface</option><option value="page">page</option><option value="function">function</option><option value="algorithm">algorithm</option></select>
+        <input type="text" id="n-title" class="grow" placeholder="Título (até 200)" maxlength="200">
+      </div>
+      <label>Descrição<textarea id="n-desc" maxlength="5000" placeholder="O que é / para que serve"></textarea></label>
+      <label>Detalhes<textarea id="n-details" maxlength="20000" placeholder="Comportamento, regras, algoritmo, pseudo-código..."></textarea></label>
+    </div>
+    <button id="btn-add-element">Adicionar elemento</button>
+  </div>
+</section>
+
+<section id="tab-sprint" class="tabpanel" style="display:none">
+  <div class="card">
+    <h2>Backlog por projeto</h2>
+    <div class="frm">
+      <div class="row">
+        <input type="text" id="t-title" class="grow" placeholder="Nova tarefa (até 200)" maxlength="200">
+        <select id="t-priority"><option value="media">media</option><option value="baixa">baixa</option><option value="alta">alta</option></select>
+      </div>
+      <label>Descrição<textarea id="t-desc" maxlength="5000"></textarea></label>
+    </div>
+    <button id="btn-add-task">Adicionar ao backlog</button>
+  </div>
+  <div class="cols3" id="sprint-cols"></div>
+</section>
+
+<section id="tab-pages" class="tabpanel" style="display:none">
+  <div class="card">
+    <h2>Páginas</h2>
+    <div id="pages-list"></div>
+    <h3>Nova página</h3>
+    <div class="row">
+      <input type="text" id="p-name" placeholder="Nome (até 200)" maxlength="200">
+      <input type="text" id="p-route" placeholder="Rota ex.: /checkout" maxlength="200">
+      <input type="text" id="p-desc" class="grow" placeholder="Descrição (até 5000)" maxlength="5000">
+      <button id="btn-add-page">Adicionar</button>
+    </div>
+  </div>
+  <div id="page-detail"></div>
+</section>
+
+<section id="tab-tables" class="tabpanel" style="display:none">
+  <div class="card">
+    <h2>Tabelas</h2>
+    <div id="tables-list"></div>
+    <h3>Nova tabela</h3>
+    <div class="row">
+      <input type="text" id="tb-name" placeholder="nome_da_tabela" maxlength="120">
+      <input type="text" id="tb-desc" class="grow" placeholder="Descrição" maxlength="5000">
+      <button id="btn-add-table">Adicionar</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Relações</h2>
+    <div id="relations-list"></div>
+    <h3>Nova relação</h3>
+    <div class="row">
+      <input type="text" id="r-from" placeholder="tabela.coluna origem" maxlength="250">
+      <select id="r-card"><option>1:N</option><option>1:1</option><option>N:N</option></select>
+      <input type="text" id="r-to" placeholder="tabela.coluna destino" maxlength="250">
+      <input type="text" id="r-desc" class="grow" placeholder="Descrição" maxlength="5000">
+      <button id="btn-add-relation">Adicionar</button>
+    </div>
+  </div>
+  <div id="table-detail"></div>
+</section>
+
+<div class="modal" id="modal"><div class="box" id="modal-box"></div></div>
+
+<script>
+'use strict';
+/* ================= base ================= */
+const esc = s => String(s === null || s === undefined ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const PROJECT_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$/;
+const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const uid = p => `${p}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`;
+const $ = id => document.getElementById(id);
+function msg(t, ok){ const e=$('msg'); e.textContent=t||''; e.className=ok?'ok':'err'; if(t) setTimeout(()=>{e.textContent='';e.className='';},6000); }
+function openModal(html){ $('modal-box').innerHTML=html; $('modal').classList.add('open'); }
+function closeModal(){ $('modal').classList.remove('open'); $('modal-box').innerHTML=''; }
+$('modal').addEventListener('click', e=>{ if(e.target.id==='modal') closeModal(); });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'&&!$('grapes-host')) closeModal(); });
+
+const FILES = {concept:'concept.json',sprint:'sprint.json',pages:'pages.json',tables:'tables.json',proposals:'proposals.json'};
+let HOME='/home/guipvi', PROJECT='', CACHE={};
+
+async function apiList(path){ const r=await fetch('/api/files/list?path='+encodeURIComponent(path)); const j=await r.json(); if(!r.ok) throw new Error(j.error||r.status); return j; }
+async function apiRead(path){ const r=await fetch('/api/files/read?path='+encodeURIComponent(path)); const j=await r.json(); if(!r.ok) throw new Error(j.error||r.status); return j.content; }
+async function apiWrite(path, content){ const r=await fetch('/api/files/write',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path,content})}); const j=await r.json(); if(!r.ok) throw new Error(j.error||r.status); return j; }
+async function apiMkdir(parent, name){ const r=await fetch('/api/files/mkdir',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:parent,name})}); const j=await r.json(); if(!r.ok){ if(/existe|exists|EEXIST/i.test(j.error||'')) return j; throw new Error(j.error||r.status);} return j; }
+async function apiDelete(path){ const r=await fetch('/api/files/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path})}); const j=await r.json(); if(!r.ok) throw new Error(j.error||r.status); return j; }
+async function apiUpload(dir, filename, content){ const fd=new FormData(); fd.append('path',dir); fd.append('files',new File([content],filename,{type:'application/json'})); const r=await fetch('/api/files/upload',{method:'POST',body:fd}); const t=await r.text(); let j; try{j=JSON.parse(t);}catch(e){j={raw:t.slice(0,200)};} if(!r.ok) throw new Error(j.error||r.status); return j; }
+
+function dataDir(){ return `${HOME}/projetos/${PROJECT}/.opencode/system-design`; }
+function dataPath(name){ return `${dataDir()}/${name}`; }
+function defaults(name){
+  if(name==='concept.json') return {version:1,vision:{objective:'',audience:'',scope:'',nonGoals:''},elements:[]};
+  if(name==='sprint.json') return {version:1,columns:['backlog','doing','done'],tasks:[]};
+  if(name==='pages.json') return {version:1,pages:[]};
+  if(name==='tables.json') return {version:1,tables:[],relations:[]};
+  return {version:1,proposals:[]};
+}
+async function ensureFile(name){
+  const path=dataPath(name);
+  try{ const raw=await apiRead(path); return JSON.parse(raw); }
+  catch(e){
+    if(!/nao encontrado|not found|404/i.test(e.message)) throw e;
+    await apiMkdir(`${HOME}/projetos/${PROJECT}/.opencode`,`system-design`).catch(()=>{});
+    const def=defaults(name);
+    try{ await apiWrite(path, JSON.stringify(def)); }
+    catch(e2){
+      if(!/nao encontrado|not found|404/i.test(e2.message)) throw e2;
+      await apiUpload(dataDir(), name, JSON.stringify(def));
+    }
+    return def;
+  }
+}
+async function loadAll(){
+  const out={};
+  for(const name of Object.values(FILES)) out[name]=await ensureFile(name);
+  CACHE=out; return out;
+}
+async function saveFile(name, obj){
+  const raw=JSON.stringify(obj);
+  if(new Blob([raw]).size>512*1024) throw new Error(name+' excede 512KB');
+  await apiWrite(dataPath(name), JSON.stringify(obj,null,2));
+  CACHE[name]=obj;
+}
+/* ================= validacao (espelho do store.py) ================= */
+const ENUMS={kind:['interface','page','function','algorithm'],priority:['baixa','media','alta'],status:['backlog','doing','done'],ptype:['texto','cabecalho','botao','formulario','imagem','lista','navegacao','outro'],ctype:['uuid','text','integer','numeric','boolean','date','timestamptz','jsonb'],card:['1:1','1:N','N:N']};
+function vStr(v,what,max,required=true){ if(v==null||v===''){ if(required) throw new Error(what+' obrigatorio'); return ''; } v=String(v).trim(); if(required&&!v) throw new Error(what+' obrigatorio'); if(v.length>max) throw new Error(what+' excede '+max+' caracteres'); return v; }
+function vEnum(v,what,allowed,def){ if(v==null||v==='') return def; if(!allowed.includes(v)) throw new Error(what+' invalido'); return v; }
+function vTableName(n,siblings){ n=vStr(n,'name',120); if(!/^[A-Za-z_][A-Za-z0-9_]{0,119}$/.test(n)) throw new Error('nome invalido (letras, numeros e _)'); if(siblings.map(s=>s.toLowerCase()).includes(n.toLowerCase())) throw new Error('ja existe: '+n); return n; }
+function lockTag(it){ return it&&it.locked?'<span class="tag locked">🔒 travado</span>':''; }
+function lockBtn(tab,kind,id,locked){ return `<button class="ghost sm" data-lock="${esc(tab)}|${esc(kind)}|${esc(id)}|${locked?0:1}">${locked?'🔓 destravar':'🔒 travar'}</button>`; }
+function fmtDate(iso){ try{ return new Date(iso).toLocaleString('pt-BR'); }catch(e){ return iso||''; } }
+
+/* ================= propostas (inbox + aprovar/rejeitar) ================= */
+function pendingProps(){ return (CACHE[FILES.proposals].proposals||[]).filter(p=>p.status==='pending'); }
+function findTarget(tab,kind,tid){
+  if(tab==='concept') return (CACHE[FILES.concept].elements||[]).find(e=>e.id===tid);
+  if(tab==='sprint') return (CACHE[FILES.sprint].tasks||[]).find(t=>t.id===tid);
+  if(tab==='pages'){ const d=CACHE[FILES.pages];
+    if(kind==='page') return d.pages.find(p=>p.id===tid);
+    for(const p of d.pages){ const el=(p.elements||[]).find(e=>e.id===tid); if(el) return el; } return null; }
+  if(tab==='tables'){ const d=CACHE[FILES.tables];
+    if(kind==='table') return d.tables.find(t=>t.id===tid);
+    if(kind==='relation') return d.relations.find(r=>r.id===tid);
+    for(const t of d.tables){ const c=(t.columns||[]).find(c=>c.id===tid); if(c) return c; } return null; }
+  return null;
+}
+function targetLabel(p){
+  const t=findTarget(p.tab,p.targetKind,p.targetId);
+  const nm=t?('“'+(t.title||t.name||t.label||p.targetId)+'”'):'(novo)';
+  return `${esc(p.tab)} · ${esc(p.targetKind)} ${p.targetId?esc(p.targetId)+' '+nm:nm}`;
+}
+function renderInbox(){
+  const list=pendingProps();
+  $('pending-count').textContent=list.length;
+  const host=$('inbox');
+  if(!list.length){ host.innerHTML='<span class="muted">Nenhuma proposta pendente. Quando o chat quiser mudar algo, aparece aqui para você aprovar.</span>'; return; }
+  host.innerHTML='<table><tr><th>Proposta</th><th>Motivo</th><th></th></tr>'+list.map(p=>{
+    const tgt=p.targetId?findTarget(p.tab,p.targetKind,p.targetId):null;
+    const locked=tgt&&tgt.locked;
+    return `<tr><td><span class="tag dim">${esc(p.action)}</span> ${targetLabel(p)} ${locked?'<span class="tag locked">🔒 travado</span>':''}<br><span class="muted mono">${esc(p.id)} · ${esc(fmtDate(p.createdAt))}</span><br><span class="muted">${esc(JSON.stringify(p.payload||{}).slice(0,300))}</span></td><td>${esc(p.reason||'—')}</td><td style="white-space:nowrap"><button class="sm" data-approve="${esc(p.id)}" ${locked?'disabled title="Destrave o alvo para aprovar"':''}>Aprovar</button> <button class="ghost sm" data-reject="${esc(p.id)}">Rejeitar</button></td></tr>`;
+  }).join('')+'</table>';
+  host.querySelectorAll('[data-approve]').forEach(b=>b.onclick=()=>decideProposal(b.dataset.approve,true));
+  host.querySelectorAll('[data-reject]').forEach(b=>b.onclick=()=>decideProposal(b.dataset.reject,false));
+}
+async function decideProposal(id,approve){
+  try{
+    const props=CACHE[FILES.proposals];
+    const p=props.proposals.find(x=>x.id===id);
+    if(!p||p.status!=='pending') throw new Error('proposta nao encontrada');
+    if(!approve){ p.status='rejected'; p.decidedAt=new Date().toISOString(); await saveFile(FILES.proposals,props); renderAll(); msg('Proposta rejeitada.',true); return; }
+    const tgt=p.targetId?findTarget(p.tab,p.targetKind,p.targetId):null;
+    if(tgt&&tgt.locked) throw new Error('alvo travado: destrave para aprovar');
+    applyChange(p.tab,p.targetKind,p.targetId,p.action,p.payload||{},'agent-aprovado');
+    await saveTabFile(p.tab);
+    p.status='approved'; p.decidedAt=new Date().toISOString();
+    await saveFile(FILES.proposals,props);
+    renderAll(); msg('Proposta aprovada e aplicada.',true);
+  }catch(e){ msg('Erro: '+e.message,false); }
+}
+async function saveTabFile(tab){ const m={concept:FILES.concept,sprint:FILES.sprint,pages:FILES.pages,tables:FILES.tables}; await saveFile(m[tab],CACHE[m[tab]]); }
+
+/* Aplica mudança (usuário direto ou proposta aprovada). Espelha store.py */
+function applyChange(tab,kind,tid,action,payload,actor){
+  payload=payload||{};
+  if(tab==='concept'){
+    const d=CACHE[FILES.concept];
+    if(kind==='concept-vision'){ for(const k of ['objective','audience','scope','nonGoals']) if(k in payload) d.vision[k]=vStr(payload[k],k,5000,false); d.visionUpdatedBy=actor; d.visionUpdatedAt=new Date().toISOString(); return d.vision; }
+    const els=d.elements;
+    if(action==='create'){ if(els.length>=500) throw new Error('limite de elementos'); const el={id:vId(payload.id||uid('e')),kind:vEnum(payload.kind,'kind',ENUMS.kind,'interface'),title:vStr(payload.title,'title',200),description:vStr(payload.description,'description',5000,false),details:vStr(payload.details,'details',20000,false),locked:false,lockedBy:null,lockedAt:null,updatedBy:actor,updatedAt:new Date().toISOString()}; els.push(el); return el; }
+    const it=els.find(e=>e.id===tid); if(!it) throw new Error('elemento nao encontrado');
+    if(actor!=='user'&&!actor.startsWith('agent-aprovado')&&it.locked) throw new Error('elemento bloqueado');
+    if(actor==='agent'&&it.locked) throw new Error('elemento bloqueado');
+    if(action==='update'){ if('kind' in payload) it.kind=vEnum(payload.kind,'kind',ENUMS.kind); if('title' in payload) it.title=vStr(payload.title,'title',200); if('description' in payload) it.description=vStr(payload.description,'description',5000,false); if('details' in payload) it.details=vStr(payload.details,'details',20000,false); it.updatedBy=actor; it.updatedAt=new Date().toISOString(); return it; }
+    if(action==='delete'){ d.elements=els.filter(e=>e.id!==tid); return {deleted:tid}; }
+    throw new Error('acao invalida');
+  }
+  if(tab==='sprint'){
+    const d=CACHE[FILES.sprint];
+    if(action==='create'){ if(d.tasks.length>=1000) throw new Error('limite de tarefas'); const t={id:vId(payload.id||uid('t')),title:vStr(payload.title,'title',200),desc:vStr(payload.desc,'desc',5000,false),priority:vEnum(payload.priority,'priority',ENUMS.priority,'media'),status:vEnum(payload.status,'status',ENUMS.status,'backlog'),assignee:vStr(payload.assignee,'assignee',120,false),locked:false,lockedBy:null,lockedAt:null,createdBy:actor,createdAt:new Date().toISOString(),updatedBy:actor,updatedAt:new Date().toISOString()}; d.tasks.push(t); return t; }
+    const t=d.tasks.find(x=>x.id===tid); if(!t) throw new Error('tarefa nao encontrada');
+    if((actor==='agent')&&t.locked) throw new Error('tarefa bloqueada');
+    if(action==='update'||action==='move'){ if('title' in payload) t.title=vStr(payload.title,'title',200); if('desc' in payload) t.desc=vStr(payload.desc,'desc',5000,false); if('priority' in payload) t.priority=vEnum(payload.priority,'priority',ENUMS.priority); if('status' in payload) t.status=vEnum(payload.status,'status',ENUMS.status); if('assignee' in payload) t.assignee=vStr(payload.assignee,'assignee',120,false); t.updatedBy=actor; t.updatedAt=new Date().toISOString(); return t; }
+    if(action==='delete'){ d.tasks=d.tasks.filter(x=>x.id!==tid); return {deleted:tid}; }
+    throw new Error('acao invalida');
+  }
+  if(tab==='pages') return applyPages(kind,tid,action,payload,actor);
+  if(tab==='tables') return applyTables(kind,tid,action,payload,actor);
+  throw new Error('tab invalida');
+}
+function vId(id){ if(!ID_RE.test(id)) throw new Error('id invalido'); return id; }
+
+/* ================= aba: projeto conceitual ================= */
+function renderConcept(){
+  const d=CACHE[FILES.concept];
+  $('v-objective').value=d.vision.objective||''; $('v-audience').value=d.vision.audience||'';
+  $('v-scope').value=d.vision.scope||''; $('v-nongoals').value=d.vision.nonGoals||'';
+  $('vision-meta').textContent=d.visionUpdatedAt?('atualizado '+fmtDate(d.visionUpdatedAt)+' por '+esc(d.visionUpdatedBy||'')):'';
+  const kind=$('f-kind').value, q=($('f-search').value||'').toLowerCase();
+  const els=(d.elements||[]).filter(e=>(!kind||e.kind===kind)&&(!q||(e.title+' '+e.description+' '+e.details).toLowerCase().includes(q)));
+  $('concept-list').innerHTML=els.length?'<table><tr><th>Elemento</th><th>Tipo</th><th></th></tr>'+els.map(e=>`<tr><td><strong>${esc(e.title)}</strong> ${lockTag(e)}<br><span class="muted">${esc((e.description||'').slice(0,160))}</span><br><span class="muted mono">${esc(e.id)} · ${esc(fmtDate(e.updatedAt))}</span></td><td><span class="tag dim">${esc(e.kind)}</span></td><td style="white-space:nowrap"><button class="ghost sm" data-view-el="${esc(e.id)}">ver</button> <button class="ghost sm" data-edit-el="${esc(e.id)}">editar</button> ${lockBtn('concept','concept-element',e.id,e.locked)} <button class="danger sm" data-del-el="${esc(e.id)}">excluir</button></td></tr>`).join('')+'</table>':'<span class="muted">Nenhum elemento. Descreva acima como o sistema deve funcionar.</span>';
+  $('concept-list').querySelectorAll('[data-view-el]').forEach(b=>b.onclick=()=>viewElement(b.dataset.viewEl));
+  $('concept-list').querySelectorAll('[data-edit-el]').forEach(b=>b.onclick=()=>editElement(b.dataset.editEl));
+  $('concept-list').querySelectorAll('[data-del-el]').forEach(b=>b.onclick=()=>delElement(b.dataset.delEl));
+  bindLocks($('concept-list'));
+}
+function viewElement(id){
+  const e=CACHE[FILES.concept].elements.find(x=>x.id===id); if(!e) return;
+  openModal(`<h2 style="color:#93c5fd;margin-bottom:.5rem">${esc(e.title)} ${lockTag(e)}</h2><p><span class="tag dim">${esc(e.kind)}</span> <span class="muted mono">${esc(e.id)}</span></p><h3>Descrição</h3><p style="white-space:pre-wrap">${esc(e.description||'—')}</p><h3>Detalhes</h3><p style="white-space:pre-wrap">${esc(e.details||'—')}</p><div class="row" style="margin-top:.8rem"><button class="ghost" onclick="closeModal()">Fechar</button></div>`);
+}
+function editElement(id){
+  const e=CACHE[FILES.concept].elements.find(x=>x.id===id); if(!e) return;
+  openModal(`<h2 style="color:#93c5fd;margin-bottom:.5rem">Editar elemento</h2><div class="frm"><div class="row"><select id="m-kind">${ENUMS.kind.map(k=>`<option ${k===e.kind?'selected':''}>${k}</option>`).join('')}</select><input type="text" id="m-title" class="grow" value="${esc(e.title)}" maxlength="200"></div><label>Descrição<textarea id="m-desc" maxlength="5000">${esc(e.description||'')}</textarea></label><label>Detalhes<textarea id="m-details" maxlength="20000">${esc(e.details||'')}</textarea></label></div><div class="row"><button id="m-save">Salvar</button><button class="ghost" onclick="closeModal()">Cancelar</button></div>`);
+  $('m-save').onclick=async()=>{ try{ applyChange('concept','concept-element',id,'update',{kind:$('m-kind').value,title:$('m-title').value,description:$('m-desc').value,details:$('m-details').value},'user'); await saveTabFile('concept'); closeModal(); renderAll(); msg('Elemento salvo.',true);}catch(err){msg('Erro: '+err.message,false);} };
+}
+async function delElement(id){
+  const e=CACHE[FILES.concept].elements.find(x=>x.id===id);
+  if(!e||!confirm('Excluir "'+e.title+'"?')) return;
+  try{ applyChange('concept','concept-element',id,'delete',{},'user'); await saveTabFile('concept'); renderAll(); msg('Excluído.',true);}catch(err){msg('Erro: '+err.message,false);}
+}
+
+/* ================= aba: sprint ================= */
+const STATUS_LABEL={backlog:'Backlog',doing:'Executando',done:'Executado'};
+function renderSprint(){
+  const d=CACHE[FILES.sprint];
+  $('sprint-cols').innerHTML=['backlog','doing','done'].map(st=>{
+    const ts=d.tasks.filter(t=>t.status===st);
+    return `<div class="col"><h3>${STATUS_LABEL[st]} <span class="tag dim">${ts.length}</span></h3>`+(ts.length?ts.map(t=>`<div class="task"><div class="t">${esc(t.title)} ${lockTag(t)}</div><div class="muted">${esc((t.desc||'').slice(0,120))}</div><div class="muted">prioridade: ${esc(t.priority)}${t.assignee?' · '+esc(t.assignee):''}</div><div class="row" style="margin-top:.35rem">${st!=='backlog'?`<button class="ghost sm" data-mv="${esc(t.id)}|${st==='doing'?'backlog':'doing'}">←</button>`:''}${st!=='done'?`<button class="ghost sm" data-mv="${esc(t.id)}|${st==='backlog'?'doing':'done'}">→</button>`:''}<button class="ghost sm" data-edit-t="${esc(t.id)}">editar</button>${lockBtn('sprint','sprint-task',t.id,t.locked)}<button class="danger sm" data-del-t="${esc(t.id)}">x</button></div></div>`).join(''):'<span class="muted">vazio</span>')+`</div>`;
+  }).join('');
+  $('sprint-cols').querySelectorAll('[data-mv]').forEach(b=>b.onclick=()=>moveTask(b.dataset.mv.split('|')[0],b.dataset.mv.split('|')[1]));
+  $('sprint-cols').querySelectorAll('[data-edit-t]').forEach(b=>b.onclick=()=>editTask(b.dataset.editT));
+  $('sprint-cols').querySelectorAll('[data-del-t]').forEach(b=>b.onclick=()=>delTask(b.dataset.delT));
+  bindLocks($('sprint-cols'));
+}
+async function moveTask(id,st){
+  try{ applyChange('sprint','sprint-task',id,'move',{status:st},'user'); await saveTabFile('sprint'); renderAll(); }
+  catch(e){ msg('Erro: '+e.message,false); }
+}
+function editTask(id){
+  const t=CACHE[FILES.sprint].tasks.find(x=>x.id===id); if(!t) return;
+  openModal(`<h2 style="color:#93c5fd;margin-bottom:.5rem">Editar tarefa</h2><div class="frm"><input type="text" id="m-title" value="${esc(t.title)}" maxlength="200"><label>Descrição<textarea id="m-desc" maxlength="5000">${esc(t.desc||'')}</textarea></label><div class="row"><select id="m-prio">${ENUMS.priority.map(p=>`<option ${p===t.priority?'selected':''}>${p}</option>`).join('')}</select><select id="m-status">${ENUMS.status.map(s=>`<option ${s===t.status?'selected':''}>${s}</option>`).join('')}</select><input type="text" id="m-ass" value="${esc(t.assignee||'')}" placeholder="responsável" maxlength="120"></div></div><div class="row"><button id="m-save">Salvar</button><button class="ghost" onclick="closeModal()">Cancelar</button></div>`);
+  $('m-save').onclick=async()=>{ try{ applyChange('sprint','sprint-task',id,'update',{title:$('m-title').value,desc:$('m-desc').value,priority:$('m-prio').value,status:$('m-status').value,assignee:$('m-ass').value},'user'); await saveTabFile('sprint'); closeModal(); renderAll(); msg('Tarefa salva.',true);}catch(err){msg('Erro: '+err.message,false);} };
+}
+async function delTask(id){ if(!confirm('Excluir tarefa?')) return; try{ applyChange('sprint','sprint-task',id,'delete',{},'user'); await saveTabFile('sprint'); renderAll(); }catch(e){ msg('Erro: '+e.message,false); } }
+/* ================= aba: páginas ================= */
+let OPEN_PAGE=null;
+function applyPages(kind,tid,action,payload,actor){
+  const d=CACHE[FILES.pages]; payload=payload||{};
+  if(kind==='page'){
+    if(action==='create'){ if(d.pages.length>=200) throw new Error('limite de paginas'); const clean=validatePage(payload); const now=new Date().toISOString(); const pg={id:vId(payload.id||uid('p')),...clean,locked:false,lockedBy:null,lockedAt:null,elements:[],updatedBy:actor,updatedAt:now}; d.pages.push(pg); return pg; }
+    const pg=d.pages.find(p=>p.id===tid); if(!pg) throw new Error('pagina nao encontrada');
+    if(actor==='agent'&&pg.locked) throw new Error('pagina bloqueada');
+    if(action==='update'){ const clean=validatePage(payload,true); for(const k of Object.keys(clean)) if(k in payload) pg[k]=clean[k]; pg.updatedBy=actor; pg.updatedAt=new Date().toISOString(); return pg; }
+    if(action==='delete'){ d.pages=d.pages.filter(p=>p.id!==tid); if(OPEN_PAGE===tid) OPEN_PAGE=null; return {deleted:tid}; }
+    throw new Error('acao invalida');
+  }
+  if(kind==='page-element'){
+    const pageId=action==='create'?(payload.pageId||payload.page_id):(payload.pageId||payload.page_id||pageOf(tid));
+    const pg=d.pages.find(p=>p.id===pageId); if(!pg) throw new Error('pagina nao encontrada');
+    if(action==='create'){ if(actor==='agent'&&pg.locked) throw new Error('pagina bloqueada'); const els=pg.elements; if(els.length>=200) throw new Error('limite de elementos'); const clean=validateElement(payload); const now=new Date().toISOString(); const el={id:vId(payload.id||uid('el')),...clean,locked:false,lockedBy:null,lockedAt:null,snapshotHtml:'',comments:[],updatedBy:actor,updatedAt:now}; els.push(el); return el; }
+    const owner=pageOf(tid), el=findEl(tid);
+    if(actor==='agent'&&(el.locked||d.pages.find(p=>p.id===owner).locked)) throw new Error('elemento bloqueado');
+    if(action==='update'){ const clean=validateElement(payload,true); for(const k of Object.keys(clean)) if(k in payload) el[k]=clean[k]; if('snapshotHtml' in payload&&actor==='user') el.snapshotHtml=vStr(payload.snapshotHtml,'snapshotHtml',20000,false); el.updatedBy=actor; el.updatedAt=new Date().toISOString(); return el; }
+    if(action==='delete'){ const o=d.pages.find(p=>p.id===owner); o.elements=o.elements.filter(e=>e.id!==tid); return {deleted:tid}; }
+    throw new Error('acao invalida');
+  }
+  if(kind==='page-comment'){
+    if(action!=='comment') throw new Error('comentarios usam acao comment');
+    const el=findEl(payload.elementId||payload.element_id||tid);
+    if(el.comments.length>=200) throw new Error('limite de comentarios');
+    const c={id:vId(payload.id||uid('c')),author:vStr(payload.author,'author',120,false)||actor,text:vStr(payload.text,'text',2000),createdAt:new Date().toISOString()};
+    el.comments.push(c); el.updatedBy=actor; el.updatedAt=new Date().toISOString(); return c;
+  }
+  throw new Error('alvo invalido');
+}
+function validatePage(p,partial){ const req=!partial; const o={};
+  o.name=vStr(p.name,'name',200,req); o.route=vStr(p.route,'route',200,false); o.desc=vStr(p.desc,'desc',5000,false);
+  if(o.route&&!/^[A-Za-z0-9/_.:-]{1,200}$/.test(o.route)) throw new Error('route invalida'); return o; }
+function validateElement(p,partial){ const req=!partial; return {type:vEnum(p.type,'type',ENUMS.ptype,'texto'),label:vStr(p.label,'label',200,req),content:vStr(p.content,'content',20000,false),order:Number.isInteger(p.order)?p.order:0}; }
+function pageOf(eid){ for(const p of CACHE[FILES.pages].pages) for(const e of (p.elements||[])) if(e.id===eid) return p.id; throw new Error('elemento nao encontrado'); }
+function findEl(eid){ vId(eid); for(const p of CACHE[FILES.pages].pages) for(const e of (p.elements||[])) if(e.id===eid) return e; throw new Error('elemento nao encontrado'); }
+function renderPages(){
+  const d=CACHE[FILES.pages];
+  $('pages-list').innerHTML=d.pages.length?'<table><tr><th>Página</th><th>Rota</th><th>Elem.</th><th></th></tr>'+d.pages.map(p=>`<tr><td><strong>${esc(p.name)}</strong> ${lockTag(p)}<br><span class="muted">${esc((p.desc||'').slice(0,120))}</span></td><td class="mono">${esc(p.route||'—')}</td><td>${(p.elements||[]).length}</td><td style="white-space:nowrap"><button class="sm" data-open-p="${esc(p.id)}">abrir</button> <button class="ghost sm" data-edit-p="${esc(p.id)}">editar</button> ${lockBtn('pages','page',p.id,p.locked)} <button class="danger sm" data-del-p="${esc(p.id)}">x</button></td></tr>`).join('')+'</table>':'<span class="muted">Nenhuma página. Cadastre as páginas do sistema.</span>';
+  $('pages-list').querySelectorAll('[data-open-p]').forEach(b=>b.onclick=()=>{OPEN_PAGE=b.dataset.openP;renderPageDetail();});
+  $('pages-list').querySelectorAll('[data-edit-p]').forEach(b=>b.onclick=()=>editPage(b.dataset.editP));
+  $('pages-list').querySelectorAll('[data-del-p]').forEach(b=>b.onclick=()=>delPage(b.dataset.delP));
+  bindLocks($('pages-list'));
+  renderPageDetail();
+}
+function editPage(id){
+  const p=CACHE[FILES.pages].pages.find(x=>x.id===id); if(!p) return;
+  openModal(`<h2 style="color:#93c5fd;margin-bottom:.5rem">Editar página</h2><div class="frm"><input type="text" id="m-name" value="${esc(p.name)}" maxlength="200"><input type="text" id="m-route" value="${esc(p.route||'')}" maxlength="200"><label>Descrição<textarea id="m-desc" maxlength="5000">${esc(p.desc||'')}</textarea></label></div><div class="row"><button id="m-save">Salvar</button><button class="ghost" onclick="closeModal()">Cancelar</button></div>`);
+  $('m-save').onclick=async()=>{ try{ applyChange('pages','page',id,'update',{name:$('m-name').value,route:$('m-route').value,desc:$('m-desc').value},'user'); await saveTabFile('pages'); closeModal(); renderAll(); msg('Página salva.',true);}catch(e){msg('Erro: '+e.message,false);} };
+}
+async function delPage(id){ if(!confirm('Excluir página e seus elementos?')) return; try{ applyChange('pages','page',id,'delete',{},'user'); await saveTabFile('pages'); renderAll(); }catch(e){ msg('Erro: '+e.message,false); } }
+function renderPageDetail(){
+  const host=$('page-detail');
+  const pg=CACHE[FILES.pages].pages.find(p=>p.id===OPEN_PAGE);
+  if(!pg){ host.innerHTML=''; return; }
+  host.innerHTML=`<div class="card"><h2>${esc(pg.name)} ${lockTag(pg)} <span class="hint">elementos, comentários e travas de design</span></h2>
+  ${(pg.elements||[]).map(e=>`<div class="task"><div class="t">[${esc(e.type)}] ${esc(e.label)} ${lockTag(e)}</div><div class="muted" style="white-space:pre-wrap">${esc((e.content||'').slice(0,300))}</div>
+  ${e.snapshotHtml?`<details><summary>pré-visualização do editor visual</summary><iframe class="preview" sandbox="" srcdoc="${esc(e.snapshotHtml)}"></iframe></details>`:''}
+  <details><summary>Comentários (${(e.comments||[]).length})</summary><div>${(e.comments||[]).map(c=>`<div class="comment"><div class="who">${esc(c.author)} · ${esc(fmtDate(c.createdAt))}</div><div class="txt">${esc(c.text)}</div></div>`).join('')||'<span class="muted">sem comentários</span>'}</div><div class="row" style="margin-top:.4rem"><input type="text" data-c-author="${esc(e.id)}" class="grow" placeholder="seu nome" maxlength="120" value="você"><input type="text" data-c-text="${esc(e.id)}" class="grow" placeholder="Comentar neste elemento..." maxlength="2000"><button class="sm" data-c-send="${esc(e.id)}">Comentar</button></div></details>
+  <div class="row" style="margin-top:.35rem"><button class="ghost sm" data-edit-el2="${esc(e.id)}">editar</button><button class="ghost sm" data-visual="${esc(e.id)}">editor visual</button>${lockBtn('pages','page-element',e.id,e.locked)}<button class="danger sm" data-del-el2="${esc(e.id)}">x</button></div></div>`).join('')||'<span class="muted">Sem elementos ainda.</span>'}
+  <h3>Novo elemento</h3><div class="row"><select id="e-type">${ENUMS.ptype.map(t=>`<option>${t}</option>`).join('')}</select><input type="text" id="e-label" class="grow" placeholder="Rótulo (até 200)" maxlength="200"><input type="text" id="e-content" class="grow" placeholder="Conteúdo/descrição (até 20000)" maxlength="20000"><button id="e-add">Adicionar</button></div></div>`;
+  host.querySelectorAll('[data-edit-el2]').forEach(b=>b.onclick=()=>editPageElement(b.dataset.editEl2));
+  host.querySelectorAll('[data-del-el2]').forEach(b=>b.onclick=()=>delPageElement(b.dataset.delEl2));
+  host.querySelectorAll('[data-c-send]').forEach(b=>b.onclick=()=>sendComment(b.dataset.cSend));
+  host.querySelectorAll('[data-visual]').forEach(b=>b.onclick=()=>openVisualEditor(b.dataset.visual));
+  bindLocks(host);
+  $('e-add').onclick=addPageElement;
+}
+async function addPageElement(){
+  try{ applyChange('pages','page-element',null,'create',{pageId:OPEN_PAGE,type:$('e-type').value,label:$('e-label').value,content:$('e-content').value},'user'); await saveTabFile('pages'); renderAll(); msg('Elemento adicionado.',true);}catch(e){msg('Erro: '+e.message,false);}
+}
+function editPageElement(id){
+  const el=findEl(id);
+  openModal(`<h2 style="color:#93c5fd;margin-bottom:.5rem">Editar elemento</h2><div class="frm"><div class="row"><select id="m-type">${ENUMS.ptype.map(t=>`<option ${t===el.type?'selected':''}>${t}</option>`).join('')}</select><input type="text" id="m-label" class="grow" value="${esc(el.label)}" maxlength="200"></div><label>Conteúdo<textarea id="m-content" maxlength="20000">${esc(el.content||'')}</textarea></label></div><div class="row"><button id="m-save">Salvar</button><button class="ghost" onclick="closeModal()">Cancelar</button></div>`);
+  $('m-save').onclick=async()=>{ try{ applyChange('pages','page-element',id,'update',{type:$('m-type').value,label:$('m-label').value,content:$('m-content').value},'user'); await saveTabFile('pages'); closeModal(); renderAll(); msg('Elemento salvo.',true);}catch(e){msg('Erro: '+e.message,false);} };
+}
+async function delPageElement(id){ if(!confirm('Excluir elemento?')) return; try{ applyChange('pages','page-element',id,'delete',{pageId:pageOf(id)},'user'); await saveTabFile('pages'); renderAll(); }catch(e){ msg('Erro: '+e.message,false); } }
+async function sendComment(eid){
+  const host=$('page-detail');
+  const author=host.querySelector(`[data-c-author="${eid}"]`).value||'você';
+  const text=host.querySelector(`[data-c-text="${eid}"]`).value;
+  try{ applyChange('pages','page-comment',eid,'comment',{elementId:eid,author,text},'user'); await saveTabFile('pages'); renderAll(); msg('Comentário adicionado.',true);}catch(e){msg('Erro: '+e.message,false);}
+}
+/* Editor visual open-source (GrapesJS, MIT) sob demanda, com fallback */
+let GRAPES_LOADING=null;
+function loadGrapes(){
+  if(window.grapesjs) return Promise.resolve();
+  if(GRAPES_LOADING) return GRAPES_LOADING;
+  GRAPES_LOADING=new Promise((resolve,reject)=>{
+    const link=document.createElement('link'); link.rel='stylesheet'; link.href='https://cdn.jsdelivr.net/npm/grapesjs@0.22.6/dist/css/grapes.min.css'; document.head.appendChild(link);
+    const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/grapesjs@0.22.6/dist/grapes.min.js';
+    s.onload=()=>resolve(); s.onerror=()=>reject(new Error('CDN indisponivel'));
+    document.head.appendChild(s);
+  });
+  return GRAPES_LOADING;
+}
+async function openVisualEditor(eid){
+  const el=findEl(eid);
+  if(el.locked){ msg('Elemento travado: destrave para editar o design.',false); return; }
+  openModal(`<h2 style="color:#93c5fd;margin-bottom:.5rem">Editor visual — ${esc(el.label)}</h2><p class="hint">Editor open-source (GrapesJS, MIT), carregado somente agora, sob seu clique. O HTML final vira uma pré-visualização travável do elemento.</p><div id="grapes-host"></div><div class="row" style="margin-top:.6rem"><button id="g-save">Salvar design no elemento</button><button class="ghost" onclick="closeModal()">Fechar</button></div><div class="hint" id="g-msg"></div>`);
+  try{
+    await loadGrapes();
+    const ed=grapesjs.init({container:'#grapes-host',height:'420px',fromElement:false,storageManager:false,components:el.snapshotHtml||`<div><h2>${esc(el.label)}</h2><p>${esc(el.content||'')}</p></div>`});
+    $('g-save').onclick=async()=>{ try{ const html=ed.getHtml(); applyChange('pages','page-element',eid,'update',{snapshotHtml:html},'user'); await saveTabFile('pages'); closeModal(); renderAll(); msg('Design salvo como pré-visualização.',true);}catch(e){msg('Erro: '+e.message,false);} };
+  }catch(e){ $('g-msg').textContent='Editor visual indisponível (sem internet para o CDN). Use o formulário de conteúdo.'; }
+}
+
+/* ================= aba: tabelas ================= */
+let OPEN_TABLE=null;
+function applyTables(kind,tid,action,payload,actor){
+  const d=CACHE[FILES.tables]; payload=payload||{};
+  if(kind==='table'){
+    if(action==='create'){ if(d.tables.length>=200) throw new Error('limite de tabelas'); const name=vTableName(payload.name,d.tables.map(t=>t.name)); const now=new Date().toISOString(); const tb={id:vId(payload.id||uid('tb')),name,desc:vStr(payload.desc,'desc',5000,false),locked:false,lockedBy:null,lockedAt:null,columns:[],updatedBy:actor,updatedAt:now}; d.tables.push(tb); return tb; }
+    const tb=d.tables.find(t=>t.id===tid); if(!tb) throw new Error('tabela nao encontrada');
+    if(actor==='agent'&&tb.locked) throw new Error('tabela bloqueada');
+    if(action==='update'){ if('desc' in payload) tb.desc=vStr(payload.desc,'desc',5000,false); tb.updatedBy=actor; tb.updatedAt=new Date().toISOString(); return tb; }
+    if(action==='delete'){ const refs=referencedBy(tb.name); if(refs.length) throw new Error('tabela referenciada por: '+refs.slice(0,5).join(', ')); d.tables=d.tables.filter(t=>t.id!==tid); if(OPEN_TABLE===tid) OPEN_TABLE=null; return {deleted:tid}; }
+    throw new Error('acao invalida');
+  }
+  if(kind==='table-column'){
+    if(action==='create'){ const tb=d.tables.find(t=>t.id===(payload.tableId||payload.table_id)); if(!tb) throw new Error('tabela nao encontrada'); if(actor==='agent'&&tb.locked) throw new Error('tabela bloqueada'); if(tb.columns.length>=100) throw new Error('limite de colunas'); const col=validateColumn(payload,tb.columns.map(c=>c.name),d.tables); const now=new Date().toISOString(); const nc={id:vId(payload.id||uid('col')),...col,locked:false,lockedBy:null,lockedAt:null,updatedBy:actor,updatedAt:now}; tb.columns.push(nc); return nc; }
+    const found=findColumn(tid); const tb=found.tb, col=found.col;
+    if(actor==='agent'&&(col.locked||tb.locked)) throw new Error('coluna bloqueada');
+    if(action==='update'){ if('name' in payload&&payload.name!==col.name){ const refs=referencedBy(tb.name,col.name); if(refs.length) throw new Error('coluna referenciada por: '+refs.slice(0,5).join(', ')); } const clean=validateColumn({...col,...payload},true,tb.columns.filter(c=>c.id!==tid).map(c=>c.name),d.tables); for(const k of Object.keys(clean)) if(k in payload) col[k]=clean[k]; col.updatedBy=actor; col.updatedAt=new Date().toISOString(); return col; }
+    if(action==='delete'){ const refs=referencedBy(tb.name,col.name); if(refs.length) throw new Error('coluna referenciada por: '+refs.slice(0,5).join(', ')); tb.columns=tb.columns.filter(c=>c.id!==tid); return {deleted:tid}; }
+    throw new Error('acao invalida');
+  }
+  if(kind==='relation'){
+    if(action==='create'){ if(d.relations.length>=500) throw new Error('limite de relacoes'); const rel=validateRelation(payload,d.tables); const now=new Date().toISOString(); const nr={id:vId(payload.id||uid('rel')),...rel,locked:false,lockedBy:null,lockedAt:null,updatedBy:actor,updatedAt:now}; d.relations.push(nr); return nr; }
+    const rel=d.relations.find(r=>r.id===tid); if(!rel) throw new Error('relacao nao encontrada');
+    if(actor==='agent'&&rel.locked) throw new Error('relacao bloqueada');
+    if(action==='update'){ if('cardinality' in payload) rel.cardinality=vEnum(payload.cardinality,'cardinality',ENUMS.card); if('desc' in payload) rel.desc=vStr(payload.desc,'desc',5000,false); rel.updatedBy=actor; rel.updatedAt=new Date().toISOString(); return rel; }
+    if(action==='delete'){ d.relations=d.relations.filter(r=>r.id!==tid); return {deleted:tid}; }
+    throw new Error('acao invalida');
+  }
+  throw new Error('alvo invalido');
+}
+function validateColumn(p,siblings,tables){
+  const partial=p._partial; const req=!partial;
+  const name=p.name!==undefined?vTableName(p.name,siblings||[]):(req?(()=>{throw new Error('name obrigatorio')})():undefined);
+  const o={}; if(name!==undefined)o.name=name;
+  o.type=vEnum(p.type,'type',ENUMS.ctype,'text'); o.pk=!!p.pk; o.nullable=p.nullable!==false;
+  o.desc=vStr(p.desc,'desc',5000,false);
+  if(p.fk!==undefined&&p.fk!==null){ if(typeof p.fk!=='object') throw new Error('fk invalida'); const t=vStr(p.fk.table,'fk.table',120), c=vStr(p.fk.column,'fk.column',120); const tgt=(tables||[]).find(x=>x.name===t); if(!tgt) throw new Error('fk: tabela inexistente '+t); if(!(tgt.columns||[]).some(x=>x.name===c)) throw new Error('fk: coluna inexistente '+t+'.'+c); o.fk={table:t,column:c}; }
+  else o.fk=null;
+  return o;
+}
+function validateRelation(p,tables){
+  const g=k=>vStr(p[k]||p[k.replace(/([A-Z])/g,m=>'_'+m.toLowerCase())],k,120);
+  const fromTable=g('fromTable'),fromColumn=g('fromColumn'),toTable=g('toTable'),toColumn=g('toColumn');
+  const src=tables.find(t=>t.name===fromTable),dst=tables.find(t=>t.name===toTable);
+  if(!src) throw new Error('origem inexistente: '+fromTable); if(!dst) throw new Error('destino inexistente: '+toTable);
+  if(!(src.columns||[]).some(c=>c.name===fromColumn)) throw new Error('coluna origem inexistente');
+  if(!(dst.columns||[]).some(c=>c.name===toColumn)) throw new Error('coluna destino inexistente');
+  return {fromTable,fromColumn,toTable,toColumn,cardinality:vEnum(p.cardinality,'cardinality',ENUMS.card,'1:N'),desc:vStr(p.desc,'desc',5000,false)};
+}
+function findColumn(cid){ vId(cid); for(const t of CACHE[FILES.tables].tables) for(const c of (t.columns||[])) if(c.id===cid) return {tb:t,col:c}; throw new Error('coluna nao encontrada'); }
+function referencedBy(tname,cname){
+  const d=CACHE[FILES.tables],refs=[];
+  for(const r of d.relations) if(r.toTable===tname&&(cname==null||r.toColumn===cname)) refs.push('rel:'+r.id);
+  for(const t of d.tables) for(const c of (t.columns||[])){ const fk=c.fk||{}; if(fk.table===tname&&(cname==null||fk.column===cname)) refs.push(t.name+'.'+c.name); }
+  return refs;
+}
+function renderTables(){
+  const d=CACHE[FILES.tables];
+  $('tables-list').innerHTML=d.tables.length?'<table><tr><th>Tabela</th><th>Colunas</th><th></th></tr>'+d.tables.map(t=>`<tr><td><strong class="mono">${esc(t.name)}</strong> ${lockTag(t)}<br><span class="muted">${esc((t.desc||'').slice(0,120))}</span></td><td>${(t.columns||[]).length}</td><td style="white-space:nowrap"><button class="sm" data-open-t="${esc(t.id)}">abrir</button>${lockBtn('tables','table',t.id,t.locked)}<button class="danger sm" data-del-t="${esc(t.id)}">x</button></td></tr>`).join('')+'</table>':'<span class="muted">Nenhuma tabela. Modele as entidades do sistema.</span>';
+  $('tables-list').querySelectorAll('[data-open-t]').forEach(b=>b.onclick=()=>{OPEN_TABLE=b.dataset.openT;renderTableDetail();});
+  $('tables-list').querySelectorAll('[data-del-t]').forEach(b=>b.onclick=()=>delTable(b.dataset.delT));
+  bindLocks($('tables-list'));
+  $('relations-list').innerHTML=d.relations.length?'<table><tr><th>De</th><th></th><th>Para</th><th></th></tr>'+d.relations.map(r=>`<tr><td class="mono">${esc(r.fromTable)}.${esc(r.fromColumn)}</td><td><span class="tag dim">${esc(r.cardinality)}</span></td><td class="mono">${esc(r.toTable)}.${esc(r.toColumn)}</td><td style="white-space:nowrap">${lockTag(r)}${lockBtn('tables','relation',r.id,r.locked)}<button class="danger sm" data-del-r="${esc(r.id)}">x</button></td></tr>`).join('')+'</table>':'<span class="muted">Sem relações.</span>';
+  $('relations-list').querySelectorAll('[data-del-r]').forEach(b=>b.onclick=()=>delRelation(b.dataset.delR));
+  bindLocks($('relations-list'));
+  renderTableDetail();
+}
+async function delTable(id){ if(!confirm('Excluir tabela? (bloqueia se houver referências)')) return; try{ applyChange('tables','table',id,'delete',{},'user'); await saveTabFile('tables'); renderAll(); }catch(e){ msg('Erro: '+e.message,false); } }
+async function delRelation(id){ try{ applyChange('tables','relation',id,'delete',{},'user'); await saveTabFile('tables'); renderAll(); }catch(e){ msg('Erro: '+e.message,false); } }
+function renderTableDetail(){
+  const host=$('table-detail');
+  const tb=CACHE[FILES.tables].tables.find(t=>t.id===OPEN_TABLE);
+  if(!tb){ host.innerHTML=''; return; }
+  host.innerHTML=`<div class="card"><h2 class="mono">${esc(tb.name)} ${lockTag(tb)}</h2>
+  <table><tr><th>Coluna</th><th>Tipo</th><th>Atributos</th><th>FK</th><th></th></tr>${(tb.columns||[]).map(c=>`<tr><td class="mono"><strong>${esc(c.name)}</strong> ${lockTag(c)}</td><td>${esc(c.type)}</td><td>${c.pk?'<span class="tag dim">PK</span>':''}${c.nullable?'':'<span class="tag dim">NOT NULL</span>'}</td><td class="mono">${c.fk?esc(c.fk.table)+'.'+esc(c.fk.column):'—'}</td><td style="white-space:nowrap"><button class="ghost sm" data-edit-c="${esc(c.id)}">editar</button>${lockBtn('tables','table-column',c.id,c.locked)}<button class="danger sm" data-del-c="${esc(c.id)}">x</button></td></tr>`).join('')||'<tr><td colspan="5" class="muted">sem colunas</td></tr>'}</table>
+  <h3>Nova coluna</h3><div class="row"><input type="text" id="c-name" placeholder="nome" maxlength="120"><select id="c-type">${ENUMS.ctype.map(t=>`<option>${t}</option>`).join('')}</select><label class="muted"><input type="checkbox" id="c-pk"> PK</label><label class="muted"><input type="checkbox" id="c-nn"> NOT NULL</label><input type="text" id="c-fk" class="grow" placeholder="FK tabela.coluna (opcional)" maxlength="250"><button id="c-add">Adicionar</button></div></div>`;
+  host.querySelectorAll('[data-edit-c]').forEach(b=>b.onclick=()=>editColumn(b.dataset.editC));
+  host.querySelectorAll('[data-del-c]').forEach(b=>b.onclick=()=>delColumn(b.dataset.delC));
+  bindLocks(host);
+  $('c-add').onclick=addColumn;
+}
+async function addColumn(){
+  const fkRaw=($('c-fk').value||'').trim(); let fk=null;
+  if(fkRaw){ const m=fkRaw.split('.'); if(m.length!==2){ msg('Erro: FK no formato tabela.coluna',false); return; } fk={table:m[0].trim(),column:m[1].trim()}; }
+  try{ applyChange('tables','table-column',null,'create',{tableId:OPEN_TABLE,name:$('c-name').value,type:$('c-type').value,pk:$('c-pk').checked,nullable:!$('c-nn').checked,fk,desc:''},'user'); await saveTabFile('tables'); renderAll(); msg('Coluna adicionada.',true);}catch(e){msg('Erro: '+e.message,false);}
+}
+function editColumn(cid){
+  const {col}=findColumn(cid);
+  openModal(`<h2 style="color:#93c5fd;margin-bottom:.5rem">Editar coluna <span class="mono">${esc(col.name)}</span></h2><div class="frm"><div class="row"><select id="m-type">${ENUMS.ctype.map(t=>`<option ${t===col.type?'selected':''}>${t}</option>`).join('')}</select><label class="muted"><input type="checkbox" id="m-pk" ${col.pk?'checked':''}> PK</label><label class="muted"><input type="checkbox" id="m-nn" ${col.nullable?'':'checked'}> NOT NULL</label></div><input type="text" id="m-fk" value="${col.fk?esc(col.fk.table+'.'+col.fk.column):''}" placeholder="FK tabela.coluna (vazio = sem FK)" maxlength="250"><label>Descrição<textarea id="m-desc" maxlength="5000">${esc(col.desc||'')}</textarea></label></div><div class="row"><button id="m-save">Salvar</button><button class="ghost" onclick="closeModal()">Cancelar</button></div>`);
+  $('m-save').onclick=async()=>{ const fkRaw=($('m-fk').value||'').trim(); let fk=null; if(fkRaw){ const m=fkRaw.split('.'); fk={table:m[0].trim(),column:m[1].trim()}; }
+    try{ applyChange('tables','table-column',cid,'update',{type:$('m-type').value,pk:$('m-pk').checked,nullable:!$('m-nn').checked,fk,desc:$('m-desc').value},'user'); await saveTabFile('tables'); closeModal(); renderAll(); msg('Coluna salva.',true);}catch(e){msg('Erro: '+e.message,false);} };
+}
+async function delColumn(cid){ if(!confirm('Excluir coluna? (bloqueia se houver referências)')) return; try{ applyChange('tables','table-column',cid,'delete',{},'user'); await saveTabFile('tables'); renderAll(); }catch(e){ msg('Erro: '+e.message,false); } }
+
+/* ================= locks / projetos / boot ================= */
+function bindLocks(scope){ (scope||document).querySelectorAll('[data-lock]').forEach(b=>{ b.onclick=()=>toggleLock(b.dataset.lock); }); }
+async function toggleLock(spec){
+  const [tab,kind,id,to]=spec.split('|');
+  try{
+    const file={concept:FILES.concept,sprint:FILES.sprint,pages:FILES.pages,tables:FILES.tables}[tab];
+    const data=CACHE[file];
+    const tgt=findTarget(tab,kind,id);
+    if(!tgt) throw new Error('alvo nao encontrado');
+    const locked=to==='1';
+    tgt.locked=locked; tgt.lockedBy=locked?'user':null; tgt.lockedAt=locked?new Date().toISOString():null; tgt.updatedBy='user'; tgt.updatedAt=new Date().toISOString();
+    await saveFile(file,data); renderAll();
+    msg(locked?'Travado: o sistema não pode mais alterar.':'Destravado.',true);
+  }catch(e){ msg('Erro: '+e.message,false); }
+}
+async function loadProjects(){
+  const sel=$('project');
+  try{
+    const r=await fetch('/projects/index'); const j=await r.json();
+    const names=(j.projects||[]).map(p=>p.name).filter(n=>PROJECT_RE.test(n));
+    const h=await (await fetch('/api/files/home')).json().catch(()=>({}));
+    if(h.home) HOME=h.home;
+    sel.innerHTML=names.length?names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join(''):'<option value="">(nenhum projeto)</option>';
+    PROJECT=names[0]||'';
+    sel.value=PROJECT;
+  }catch(e){ sel.innerHTML='<option value="">(erro ao listar)</option>'; }
+}
+async function boot(){
+  await loadProjects();
+  if(!PROJECT){ $('proj-meta').textContent='crie um projeto em /projetos para começar'; return; }
+  await reloadAll();
+}
+async function reloadAll(){
+  if(!PROJECT) return;
+  try{ await loadAll(); $('proj-meta').textContent=PROJECT+' · '+dataDir(); renderAll(); msg(''); }
+  catch(e){ msg('Erro ao carregar: '+e.message,false); }
+}
+function renderAll(){ if(!PROJECT) return; renderInbox(); renderConcept(); renderSprint(); renderPages(); renderTables(); }
+document.querySelectorAll('#tabs .tab').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('#tabs .tab').forEach(b=>b.classList.remove('active')); t.classList.add('active');
+  document.querySelectorAll('.tabpanel').forEach(p=>p.style.display='none');
+  $('tab-'+t.dataset.tab).style.display='';
+});
+$('project').onchange=async e=>{ PROJECT=e.target.value; OPEN_PAGE=null; OPEN_TABLE=null; if(PROJECT) await reloadAll(); };
+$('btn-reload').onclick=reloadAll;
+$('f-kind').onchange=renderConcept; $('f-search').oninput=renderConcept;
+$('btn-vision').onclick=async()=>{ try{ applyChange('concept','concept-vision',null,'update',{objective:$('v-objective').value,audience:$('v-audience').value,scope:$('v-scope').value,nonGoals:$('v-nongoals').value},'user'); await saveTabFile('concept'); renderAll(); msg('Visão salva.',true);}catch(e){msg('Erro: '+e.message,false);} };
+$('btn-add-element').onclick=async()=>{ try{ applyChange('concept','concept-element',null,'create',{kind:$('n-kind').value,title:$('n-title').value,description:$('n-desc').value,details:$('n-details').value},'user'); await saveTabFile('concept'); $('n-title').value='';$('n-desc').value='';$('n-details').value=''; renderAll(); msg('Elemento adicionado.',true);}catch(e){msg('Erro: '+e.message,false);} };
+$('btn-add-task').onclick=async()=>{ try{ applyChange('sprint','sprint-task',null,'create',{title:$('t-title').value,desc:$('t-desc').value,priority:$('t-priority').value},'user'); await saveTabFile('sprint'); $('t-title').value='';$('t-desc').value=''; renderAll(); msg('Tarefa adicionada ao backlog.',true);}catch(e){msg('Erro: '+e.message,false);} };
+$('btn-add-page').onclick=async()=>{ try{ const pg=applyChange('pages','page',null,'create',{name:$('p-name').value,route:$('p-route').value,desc:$('p-desc').value},'user'); await saveTabFile('pages'); $('p-name').value='';$('p-route').value='';$('p-desc').value=''; OPEN_PAGE=pg.id; renderAll(); msg('Página criada.',true);}catch(e){msg('Erro: '+e.message,false);} };
+$('btn-add-table').onclick=async()=>{ try{ const tb=applyChange('tables','table',null,'create',{name:$('tb-name').value,desc:$('tb-desc').value},'user'); await saveTabFile('tables'); $('tb-name').value='';$('tb-desc').value=''; OPEN_TABLE=tb.id; renderAll(); msg('Tabela criada.',true);}catch(e){msg('Erro: '+e.message,false);} };
+$('btn-add-relation').onclick=async()=>{ const parse=s=>{ const m=String(s||'').trim().split('.'); return m.length===2?{table:m[0].trim(),column:m[1].trim()}:null; };
+  try{ const f=parse($('r-from').value), t=parse($('r-to').value); if(!f||!t) throw new Error('use o formato tabela.coluna'); applyChange('tables','relation',null,'create',{fromTable:f.table,fromColumn:f.column,toTable:t.table,toColumn:t.column,cardinality:$('r-card').value,desc:$('r-desc').value},'user'); await saveTabFile('tables'); $('r-from').value='';$('r-to').value='';$('r-desc').value=''; renderAll(); msg('Relação criada.',true);}catch(e){msg('Erro: '+e.message,false);} };
+boot();
+</script>
+</body>
+</html>
