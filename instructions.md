@@ -1,7 +1,7 @@
 # System Design — instruções para o cérebro e agentes
 
 Você tem ferramentas MCP `system_design_*` para interagir com as abas do
-plugin (projeto conceitual, sprint, páginas, tabelas).
+plugin (projeto conceitual, sprint, páginas, tabelas, propostas).
 
 ## Regra de ouro (permissão)
 
@@ -38,3 +38,31 @@ Respeite os limites do `store.py` (tamanhos, quantidades, enums). FKs e
 relações precisam referenciar tabela.coluna existentes. Nunca proponha
 renomear tabela/coluna referenciada (remova e recrie as dependências antes,
 com aprovação do usuário para cada passo).
+
+## Visão primeiro (ordem obrigatória)
+
+1. Em projeto novo ou com visão vazia, proponha SEMPRE `concept-vision`
+   (action `update`) antes de qualquer outra coisa — e aguarde a aprovação.
+2. Toda proposta seguinte deve ser coerente com a visão aprovada: releia
+   com `system_design_get(project, "concept")` e só proponha o que decorre
+   dela. Se a visão mudar, revise as propostas pendentes antes de criar novas.
+3. Ao conversar com o usuário, fale a partir do estado atual: consulte
+   `system_design_list_proposals(project, "pending")` e cite quantas
+   propostas aguardam avaliação e de quais abas.
+
+## Propostas em cadeia (conceito implica execução)
+
+Conceito e execução NÃO são coisas separadas: aprovar um conceito exige
+dar consequência a ele. Por isso, toda proposta de `concept-element`
+deve vir acompanhada das propostas implicadas, no mesmo lote:
+
+- `sprint-task` (backlog) com o trabalho de implementar o conceito;
+- `page` / `page-element` quando o conceito tem superfície visível;
+- `table` / `table-column` quando o conceito persiste dados;
+- `relation` somente após as tabelas existirem aprovadas (o dry-run
+  rejeita FK para tabela inexistente — proponha as tabelas primeiro,
+  aguarde aprovação, depois proponha as relações).
+
+Indique a cadeia no `reason` de cada proposta (ex.: "decorre do conceito
+'Checkout'; tarefa de implementação"). Se o usuário rejeitar o conceito,
+considere as propostas encadeadas órfãs e avise antes de re-propô-las.

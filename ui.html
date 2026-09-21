@@ -61,6 +61,40 @@ iframe.preview{width:100%;height:220px;border:1px solid #2b3345;border-radius:6p
 #grapes-host{min-height:420px;background:#fff;border-radius:6px}
 .hint{font-size:.76rem;color:#8b93a7}
 .mono{font-family:ui-monospace,monospace}
+/* ===== baralho de propostas (estilo tinder) ===== */
+#deck-wrap{max-width:600px;margin:0 auto}
+#deck-count{text-align:center;color:#8b93a7;font-size:.8rem;margin-bottom:.5rem}
+#deck{position:relative;min-height:360px;touch-action:pan-y}
+.tcard{position:absolute;inset:0;background:#10151f;border:1px solid #3b82f6;border-radius:14px;padding:1.1rem;box-shadow:0 10px 34px rgba(0,0,0,.55);will-change:transform;user-select:none;-webkit-user-select:none;cursor:grab;overflow:auto;max-height:70vh}
+.tcard:active{cursor:grabbing}
+.tcard .stamp{position:absolute;top:.9rem;font-size:.95rem;font-weight:800;padding:.2rem .6rem;border:3px solid;border-radius:8px;opacity:0;pointer-events:none}
+.tcard .stamp.yes{left:.9rem;color:#7ddf9b;border-color:#7ddf9b;transform:rotate(-12deg)}
+.tcard .stamp.no{right:.9rem;color:#f87171;border-color:#f87171;transform:rotate(12deg)}
+.tglance{font-size:1.05rem;font-weight:700;margin:.5rem 2rem .4rem 0;line-height:1.4}
+.twhy{color:#c7ccd9;font-size:.86rem;margin-bottom:.3rem}
+.tvisual{margin:.7rem 0;padding:.7rem;background:#0d1220;border:1px solid #2b3345;border-radius:8px}
+.ttech{margin-top:.5rem}
+.deck-btns{display:flex;gap:.8rem;justify-content:center;margin-top:.8rem}
+.deck-btns button{font-size:1.05rem;padding:.65rem 1.2rem;border-radius:999px;min-width:64px}
+#btn-no{background:transparent;border:2px solid #7f1d1d;color:#f87171}
+#btn-skip{background:transparent;border:2px solid #3b4458;color:#c7ccd9}
+#btn-yes{background:#14532d;border:2px solid #1f7a33;color:#fff}
+/* ===== previa de pagina como o usuario ve ===== */
+.pv-hint{font-size:.78rem;color:#8b93a7;margin:.4rem 0 .6rem}
+.pv-card{border:1px solid #2b3345;border-radius:10px;padding:.8rem;margin-bottom:.6rem;background:#0d1220;cursor:pointer}
+.pv-card:hover{border-color:#3b82f6}
+.pv-card.sel{border-color:#3b82f6;box-shadow:0 0 0 1px #3b82f6}
+.pv-card h3{margin:0 0 .3rem}
+/* ===== diagrama de tabelas ===== */
+#diagram{position:relative;display:flex;flex-wrap:wrap;gap:.7rem;padding:.4rem}
+#wires{position:absolute;inset:0;pointer-events:none;z-index:0}
+.dtable{position:relative;z-index:1;border:1px solid #2b3345;border-radius:8px;background:#0d1220;min-width:180px;max-width:270px;flex:1 1 200px}
+.dtable h4{margin:0;padding:.45rem .6rem;font-size:.82rem;border-bottom:1px solid #232a3a;color:#93c5fd}
+.dcol{padding:.28rem .6rem;font-family:ui-monospace,monospace;font-size:.76rem;cursor:pointer;border-radius:4px;margin:.1rem .3rem}
+.dcol:hover{background:#1e3a5f}
+.dcol.src{background:#14532d;color:#fff}
+.dcol.dst-ok:hover{background:#14532d}
+#linkbar{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:.5rem;font-size:.8rem;color:#8b93a7}
 </style>
 </head>
 <body>
@@ -76,19 +110,22 @@ iframe.preview{width:100%;height:220px;border:1px solid #2b3345;border-radius:6p
   <span class="muted">Propostas pendentes: <strong id="pending-count">0</strong></span>
 </div>
 
-<div class="card" id="inbox-card">
-  <h2>Inbox de propostas do chat <span class="hint">(toda edição do chat precisa da sua aprovação)</span></h2>
-  <div id="inbox"><span class="muted">Selecione um projeto.</span></div>
-</div>
-
 <div class="tabs" id="tabs">
   <button class="tab active" data-tab="concept">Projeto conceitual</button>
   <button class="tab" data-tab="sprint">Sprint</button>
   <button class="tab" data-tab="pages">Páginas</button>
   <button class="tab" data-tab="tables">Tabelas</button>
+  <button class="tab" data-tab="proposals">Propostas<span class="badge" id="tab-proposals-badge" style="display:none">0</span></button>
 </div>
 
 <div id="msg"></div>
+
+<section id="tab-proposals" class="tabpanel" style="display:none">
+<div class="card" id="inbox-card">
+  <h2>Avaliar propostas <span class="hint">(arraste para a direita = aprovar · esquerda = rejeitar)</span></h2>
+  <div id="inbox"><span class="muted">Selecione um projeto.</span></div>
+</div>
+</section>
 
 <section id="tab-concept" class="tabpanel">
   <div class="card">
@@ -266,18 +303,97 @@ function targetLabel(p){
   const nm=t?('“'+(t.title||t.name||t.label||p.targetId)+'”'):'(novo)';
   return `${esc(p.tab)} · ${esc(p.targetKind)} ${p.targetId?esc(p.targetId)+' '+nm:nm}`;
 }
+/* ============ baralho de propostas (estilo tinder) ============ */
+let DECK_IDX=0, DECK_SKIP=new Set();
+/* Resumo de designer: o essencial em uma fracao de segundo */
+function describeProposal(p){
+  const pl=p.payload||{};
+  const first=(...ks)=>{ for(const k of ks){ const v=pl[k]; if(v!==undefined&&v!==null&&String(v).trim()!=='') return String(v); } return ''; };
+  const act=p.action||'', kind=p.targetKind||'';
+  if(kind==='concept-vision') return {glance:'Visão do sistema atualizada', why:p.reason||'Direção do produto: objetivo, público, escopo e não-objetivos.'};
+  if(kind==='concept-element'){
+    const t=first('title','name');
+    if(act==='create') return {glance:`Novo elemento: ${t||'(sem título)'}`, why:`${pl.kind||'elemento'} · ${first('description','desc','ref')||p.reason||''}`.slice(0,220)};
+    if(act==='update') return {glance:`Ajustar elemento: ${t||p.targetId||''}`, why:(p.reason||'Mudança proposta pelo chat.').slice(0,220)};
+    return {glance:`Remover elemento: ${t||p.targetId||''}`, why:(p.reason||'').slice(0,220)};
+  }
+  if(kind==='sprint-task'){
+    const t=first('title');
+    if(act==='move') return {glance:`Mover tarefa para ${first('status')||'?'}: ${t||p.targetId||''}`, why:(p.reason||'').slice(0,220)};
+    if(act==='create') return {glance:`Nova tarefa: ${t||'(sem título)'}`, why:`${first('desc','description')||p.reason||''}`.slice(0,220)};
+    return {glance:`${act==='delete'?'Remover':'Ajustar'} tarefa: ${t||p.targetId||''}`, why:(p.reason||'').slice(0,220)};
+  }
+  if(kind==='page') return {glance:`${act==='create'?'Nova página':act==='delete'?'Remover página':'Ajustar página'}: ${first('name')||p.targetId||''}${pl.route?' ('+pl.route+')':''}`, why:`${first('desc','description')||p.reason||''}`.slice(0,220)};
+  if(kind==='page-element') return {glance:`Novo bloco [${pl.type||'?'}]: ${first('label')||''}`, why:`${first('content')||p.reason||''}`.slice(0,220)};
+  if(kind==='page-comment') return {glance:`Comentário do chat: “${first('text').slice(0,90)}”`, why:(p.reason||'Opinião do agente sobre o design.').slice(0,220)};
+  if(kind==='table') return {glance:`${act==='create'?'Nova tabela':act==='delete'?'Remover tabela':'Ajustar tabela'}: ${first('name')||p.targetId||''}`, why:`${Array.isArray(pl.columns)?pl.columns.length+' colunas · ':''}${first('desc')||p.reason||''}`.slice(0,220)};
+  if(kind==='table-column') return {glance:`Nova coluna: ${first('name')||''}${pl.type?' ('+pl.type+')':''}`, why:(p.reason||'').slice(0,220)};
+  if(kind==='relation') return {glance:`Ligar ${first('fromTable','from')}.${first('fromColumn')} → ${first('toTable','to')}.${first('toColumn')}`, why:`cardinalidade ${pl.cardinality||'1:N'}${p.reason?' · '+p.reason:''}`.slice(0,220)};
+  return {glance:`${act} ${kind}`, why:(p.reason||'').slice(0,220)};
+}
+/* Destaque visual quando a proposta tem algo para mostrar */
+function visualFor(p){
+  const pl=p.payload||{};
+  if(pl.snapshotHtml) return `<div class="tvisual"><iframe class="preview" sandbox="" srcdoc="${esc(pl.snapshotHtml.slice(0,8000))}"></iframe></div>`;
+  if(p.targetKind==='concept-element'&&(pl.kind==='interface'||pl.kind==='page'))
+    return `<div class="tvisual"><span class="tag">${esc(pl.kind)}</span> <strong style="font-size:1.2rem">${esc(pl.title||pl.name||'')}</strong><br><span class="muted">${esc((pl.description||pl.desc||'').slice(0,180))}</span></div>`;
+  if(p.targetKind==='table'&&Array.isArray(pl.columns)&&pl.columns.length)
+    return `<div class="tvisual">${pl.columns.slice(0,12).map(c=>`<span class="tag dim mono">${esc(typeof c==='string'?c:(c.name||''))}</span>`).join('')}${pl.columns.length>12?'<span class="muted">+'+(pl.columns.length-12)+'</span>':''}</div>`;
+  if(p.targetKind==='page') return `<div class="tvisual"><strong style="font-size:1.2rem">${esc(pl.name||'')}</strong><br><span class="mono muted">${esc(pl.route||'')}</span></div>`;
+  return '';
+}
 function renderInbox(){
-  const list=pendingProps();
-  $('pending-count').textContent=list.length;
+  const all=pendingProps();
+  $('pending-count').textContent=all.length;
+  const badge=$('tab-proposals-badge');
+  if(badge){ badge.style.display=all.length?'':'none'; badge.textContent=all.length; }
+  let list=all.filter(p=>!DECK_SKIP.has(p.id));
+  if(!list.length&&DECK_SKIP.size){ DECK_SKIP.clear(); DECK_IDX=0; list=all.slice(); }
+  if(DECK_IDX>=list.length) DECK_IDX=0;
   const host=$('inbox');
   if(!list.length){ host.innerHTML='<span class="muted">Nenhuma proposta pendente. Quando o chat quiser mudar algo, aparece aqui para você aprovar.</span>'; return; }
-  host.innerHTML='<table><tr><th>Proposta</th><th>Motivo</th><th></th></tr>'+list.map(p=>{
-    const tgt=p.targetId?findTarget(p.tab,p.targetKind,p.targetId):null;
-    const locked=tgt&&tgt.locked;
-    return `<tr><td><span class="tag dim">${esc(p.action)}</span> ${targetLabel(p)} ${locked?'<span class="tag locked">🔒 travado</span>':''}<br><span class="muted mono">${esc(p.id)} · ${esc(fmtDate(p.createdAt))}</span><br><span class="muted">${esc(JSON.stringify(p.payload||{}).slice(0,300))}</span></td><td>${esc(p.reason||'—')}</td><td style="white-space:nowrap"><button class="sm" data-approve="${esc(p.id)}" ${locked?'disabled title="Destrave o alvo para aprovar"':''}>Aprovar</button> <button class="ghost sm" data-reject="${esc(p.id)}">Rejeitar</button></td></tr>`;
-  }).join('')+'</table>';
-  host.querySelectorAll('[data-approve]').forEach(b=>b.onclick=()=>decideProposal(b.dataset.approve,true));
-  host.querySelectorAll('[data-reject]').forEach(b=>b.onclick=()=>decideProposal(b.dataset.reject,false));
+  const p=list[DECK_IDX];
+  const tgt=p.targetId?findTarget(p.tab,p.targetKind,p.targetId):null;
+  const locked=tgt&&tgt.locked;
+  const d=describeProposal(p);
+  host.innerHTML=`<div id="deck-wrap"><div id="deck-count">${DECK_IDX+1} de ${list.length} pendentes</div>
+  <div id="deck"><div class="tcard" id="tcard">
+    <span class="stamp yes" id="stamp-yes">APROVAR</span><span class="stamp no" id="stamp-no">REJEITAR</span>
+    <div><span class="tag dim">${esc(p.action||'')}</span> <span class="tag">${esc(p.tab||'')} · ${esc(p.targetKind||'')}</span> ${locked?'<span class="tag locked">🔒 travado</span>':''}</div>
+    <div class="tglance">${esc(d.glance)}</div>
+    ${d.why?`<div class="twhy">${esc(d.why)}</div>`:''}
+    ${visualFor(p)}
+    <details class="ttech"><summary>Detalhes técnicos</summary>
+      <div class="muted mono" style="font-size:.74rem">id ${esc(p.id)} · ${esc(fmtDate(p.createdAt))}</div>
+      <div class="muted" style="margin:.3rem 0">Motivo: ${esc(p.reason||'—')}</div>
+      <pre class="mono" style="white-space:pre-wrap;font-size:.74rem;background:#0b0e14;border:1px solid #2b3345;border-radius:6px;padding:.5rem;max-height:220px;overflow:auto">${esc(JSON.stringify(p.payload||{},null,2).slice(0,4000))}</pre>
+    </details>
+  </div></div>
+  <div class="deck-btns">
+    <button id="btn-no" title="Rejeitar">✕</button>
+    <button id="btn-skip" title="Pular">⏭</button>
+    <button id="btn-yes" title="Aprovar" ${locked?'disabled title="Destrave o alvo para aprovar"':''}>✓</button>
+  </div></div>`;
+  $('btn-yes').onclick=()=>decideProposal(p.id,true);
+  $('btn-no').onclick=()=>decideProposal(p.id,false);
+  $('btn-skip').onclick=()=>{ DECK_SKIP.add(p.id); DECK_IDX++; renderInbox(); };
+  bindSwipe($('tcard'),p.id,locked);
+}
+function bindSwipe(card,id,locked){
+  let sx=0,dx=0,drag=false;
+  const yes=$('stamp-yes'),no=$('stamp-no');
+  card.style.transition='';
+  card.onpointerdown=e=>{ drag=true; sx=e.clientX; card.setPointerCapture&&card.setPointerCapture(e.pointerId); };
+  card.onpointermove=e=>{ if(!drag) return; dx=e.clientX-sx;
+    card.style.transform=`translateX(${dx}px) rotate(${dx/14}deg)`;
+    yes.style.opacity=Math.max(0,Math.min(1,dx/90)); no.style.opacity=Math.max(0,Math.min(1,-dx/90)); };
+  const end=()=>{ if(!drag) return; drag=false;
+    card.style.transition='transform .22s ease';
+    if(dx>90&&!locked){ card.style.transform='translateX(120%) rotate(14deg)'; setTimeout(()=>decideProposal(id,true),200); }
+    else if(dx<-90){ card.style.transform='translateX(-120%) rotate(-14deg)'; setTimeout(()=>decideProposal(id,false),200); }
+    else { card.style.transform=''; yes.style.opacity=0; no.style.opacity=0; }
+    dx=0; };
+  card.onpointerup=end; card.onpointercancel=end;
 }
 async function decideProposal(id,approve){
   try{
@@ -430,16 +546,35 @@ function editPage(id){
   $('m-save').onclick=async()=>{ try{ applyChange('pages','page',id,'update',{name:$('m-name').value,route:$('m-route').value,desc:$('m-desc').value},'user'); await saveTabFile('pages'); closeModal(); renderAll(); msg('Página salva.',true);}catch(e){msg('Erro: '+e.message,false);} };
 }
 async function delPage(id){ if(!confirm('Excluir página e seus elementos?')) return; try{ applyChange('pages','page',id,'delete',{},'user'); await saveTabFile('pages'); renderAll(); }catch(e){ msg('Erro: '+e.message,false); } }
+/* Renderiza o bloco como o usuário final veria (revisor clica para comentar) */
+function pvRender(el){
+  const label=esc(el.label||''), content=esc(el.content||'');
+  if(el.type==='cabecalho') return `<h3>${label}</h3>${el.content?`<p class="muted">${content}</p>`:''}`;
+  if(el.type==='botao') return `<button>${label||'Botão'}</button>${el.content?`<div class="muted" style="margin-top:.3rem">${content}</div>`:''}`;
+  if(el.type==='formulario') return `<div class="frm"><label>${label||'Campo'}<input type="text" placeholder="${esc((el.content||'').slice(0,40))}"></label></div>`;
+  if(el.type==='imagem') return `<div style="background:#1a2130;border-radius:6px;min-height:110px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:.3rem"><span style="font-size:1.6rem">🖼</span><span class="muted">${label}</span></div>`;
+  if(el.type==='lista'){ const items=(el.content||'').split('\n').map(s=>s.trim()).filter(Boolean).slice(0,6); return `${label?`<strong>${label}</strong>`:''}<ul style="margin:.3rem 0 .3rem 1.1rem">${items.map(i=>`<li>${esc(i)}</li>`).join('')||'<li class="muted">(vazia)</li>'}</ul>`; }
+  if(el.type==='navegacao'){ const links=label.split('|').map(s=>s.trim()).filter(Boolean); return `<nav class="row">${links.map(l=>`<button class="ghost sm" type="button">${esc(l)}</button>`).join('')||'<span class="muted">(sem links)</span>'}</nav>`; }
+  return `${label?`<p><strong>${label}</strong></p>`:''}${el.content?`<p>${content}</p>`:''}`;
+}
 function renderPageDetail(){
   const host=$('page-detail');
   const pg=CACHE[FILES.pages].pages.find(p=>p.id===OPEN_PAGE);
   if(!pg){ host.innerHTML=''; return; }
   host.innerHTML=`<div class="card"><h2>${esc(pg.name)} ${lockTag(pg)} <span class="hint">elementos, comentários e travas de design</span></h2>
+  <h3>Prévia como o usuário vê <span class="hint">clique num bloco para comentar como revisor</span></h3>
+  <div id="pv-list">${(pg.elements||[]).map(e=>`<div class="pv-card" data-pv="${esc(e.id)}">${pvRender(e)}</div>`).join('')||'<span class="muted">Sem elementos ainda.</span>'}</div>
   ${(pg.elements||[]).map(e=>`<div class="task"><div class="t">[${esc(e.type)}] ${esc(e.label)} ${lockTag(e)}</div><div class="muted" style="white-space:pre-wrap">${esc((e.content||'').slice(0,300))}</div>
   ${e.snapshotHtml?`<details><summary>pré-visualização do editor visual</summary><iframe class="preview" sandbox="" srcdoc="${esc(e.snapshotHtml)}"></iframe></details>`:''}
-  <details><summary>Comentários (${(e.comments||[]).length})</summary><div>${(e.comments||[]).map(c=>`<div class="comment"><div class="who">${esc(c.author)} · ${esc(fmtDate(c.createdAt))}</div><div class="txt">${esc(c.text)}</div></div>`).join('')||'<span class="muted">sem comentários</span>'}</div><div class="row" style="margin-top:.4rem"><input type="text" data-c-author="${esc(e.id)}" class="grow" placeholder="seu nome" maxlength="120" value="você"><input type="text" data-c-text="${esc(e.id)}" class="grow" placeholder="Comentar neste elemento..." maxlength="2000"><button class="sm" data-c-send="${esc(e.id)}">Comentar</button></div></details>
+  <details id="c-det-${esc(e.id)}"><summary>Comentários (${(e.comments||[]).length})</summary><div>${(e.comments||[]).map(c=>`<div class="comment"><div class="who">${esc(c.author)} · ${esc(fmtDate(c.createdAt))}</div><div class="txt">${esc(c.text)}</div></div>`).join('')||'<span class="muted">sem comentários</span>'}</div><div class="row" style="margin-top:.4rem"><input type="text" data-c-author="${esc(e.id)}" class="grow" placeholder="seu nome" maxlength="120" value="você"><input type="text" data-c-text="${esc(e.id)}" class="grow" placeholder="Comentar neste elemento..." maxlength="2000"><button class="sm" data-c-send="${esc(e.id)}">Comentar</button></div></details>
   <div class="row" style="margin-top:.35rem"><button class="ghost sm" data-edit-el2="${esc(e.id)}">editar</button><button class="ghost sm" data-visual="${esc(e.id)}">editor visual</button>${lockBtn('pages','page-element',e.id,e.locked)}<button class="danger sm" data-del-el2="${esc(e.id)}">x</button></div></div>`).join('')||'<span class="muted">Sem elementos ainda.</span>'}
   <h3>Novo elemento</h3><div class="row"><select id="e-type">${ENUMS.ptype.map(t=>`<option>${t}</option>`).join('')}</select><input type="text" id="e-label" class="grow" placeholder="Rótulo (até 200)" maxlength="200"><input type="text" id="e-content" class="grow" placeholder="Conteúdo/descrição (até 20000)" maxlength="20000"><button id="e-add">Adicionar</button></div></div>`;
+  host.querySelectorAll('[data-pv]').forEach(c=>c.onclick=()=>{
+    host.querySelectorAll('.pv-card').forEach(x=>x.classList.remove('sel'));
+    c.classList.add('sel');
+    const det=$('c-det-'+c.dataset.pv);
+    if(det){ det.open=true; const inp=det.querySelector(`[data-c-text="${c.dataset.pv}"]`); if(inp){ inp.focus(); inp.scrollIntoView({block:'nearest',behavior:'smooth'}); } }
+  });
   host.querySelectorAll('[data-edit-el2]').forEach(b=>b.onclick=()=>editPageElement(b.dataset.editEl2));
   host.querySelectorAll('[data-del-el2]').forEach(b=>b.onclick=()=>delPageElement(b.dataset.delEl2));
   host.querySelectorAll('[data-c-send]').forEach(b=>b.onclick=()=>sendComment(b.dataset.cSend));
@@ -542,8 +677,67 @@ function referencedBy(tname,cname){
   for(const t of d.tables) for(const c of (t.columns||[])){ const fk=c.fk||{}; if(fk.table===tname&&(cname==null||fk.column===cname)) refs.push(t.name+'.'+c.name); }
   return refs;
 }
+/* ============ diagrama de tabelas (fluxograma linkavel) ============ */
+let LINK_SRC=null;
+function renderDiagram(d){
+  let host=$('diagram-host');
+  if(!host){
+    host=document.createElement('div');
+    host.id='diagram-host';
+    $('tables-list').before(host);
+  }
+  if(!d.tables.length){ host.innerHTML=''; return; }
+  host.innerHTML=`<div class="card"><h2>Diagrama <span class="hint">clique numa coluna de origem e depois na coluna destino para ligar</span></h2>
+  <div id="linkbar"><span id="linkbar-txt">Nenhuma origem selecionada.</span><button class="ghost sm" id="linkbar-cancel" style="display:none">cancelar</button></div>
+  <div id="diagram"><svg id="wires"></svg>${d.tables.map(t=>`<div class="dtable" data-dt="${esc(t.id)}"><h4 class="mono">${esc(t.name)} ${lockTag(t)}</h4>${(t.columns||[]).map(c=>`<div class="dcol" data-link="${esc(t.id)}|${esc(c.name)}" title="${esc(c.type)}${c.pk?' · PK':''}${c.fk?' · FK→'+esc(c.fk.table+'.'+c.fk.column):''}">${c.pk?'🔑 ':''}${esc(c.name)} <span class="muted">${esc(c.type)}</span></div>`).join('')||'<div class="muted" style="padding:.3rem .6rem">sem colunas</div>'}</div>`).join('')}</div></div>`;
+  $('linkbar-cancel').onclick=()=>{ LINK_SRC=null; refreshLinkbar(); };
+  host.querySelectorAll('[data-link]').forEach(el=>el.onclick=()=>clickLink(el.dataset.link));
+  refreshLinkbar();
+  requestAnimationFrame(drawWires);
+}
+function refreshLinkbar(){
+  const txt=$('linkbar-txt'), cancel=$('linkbar-cancel');
+  if(!txt) return;
+  if(LINK_SRC){ const [tid,cn]=LINK_SRC.split('|'); const tb=(CACHE[FILES.tables].tables||[]).find(t=>t.id===tid);
+    txt.innerHTML=`Origem: <strong class="mono">${esc((tb?tb.name:tid)+'.'+cn)}</strong> — clique a coluna destino.`;
+    cancel.style.display=''; }
+  else { txt.textContent='Nenhuma origem selecionada.'; cancel.style.display='none'; }
+  document.querySelectorAll('#diagram .dcol').forEach(el=>el.classList.toggle('src',el.dataset.link===LINK_SRC));
+}
+async function clickLink(spec){
+  if(!LINK_SRC){ LINK_SRC=spec; refreshLinkbar(); return; }
+  if(LINK_SRC===spec){ LINK_SRC=null; refreshLinkbar(); return; }
+  const [fTid,fCol]=LINK_SRC.split('|'), [tTid,tCol]=spec.split('|');
+  const tabs=CACHE[FILES.tables].tables;
+  const fTb=tabs.find(t=>t.id===fTid), tTb=tabs.find(t=>t.id===tTid);
+  if(!fTb||!tTb){ msg('Erro: tabela não encontrada',false); LINK_SRC=null; refreshLinkbar(); return; }
+  try{
+    applyChange('tables','relation',null,'create',{fromTable:fTb.name,fromColumn:fCol,toTable:tTb.name,toColumn:tCol,cardinality:($('r-card')||{}).value||'1:N',desc:''},'user');
+    await saveTabFile('tables'); LINK_SRC=null; renderAll(); msg(`Ligado ${fTb.name}.${fCol} → ${tTb.name}.${tCol}.`,true);
+  }catch(e){ msg('Erro: '+e.message,false); }
+}
+function drawWires(){
+  const svg=$('wires'), diag=$('diagram');
+  if(!svg||!diag) return;
+  const d=CACHE[FILES.tables];
+  const W=diag.scrollWidth,H=diag.scrollHeight;
+  svg.setAttribute('width',W); svg.setAttribute('height',H);
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  const box=diag.getBoundingClientRect();
+  const center=sel=>{ const el=diag.querySelector(sel); if(!el) return null; const r=el.getBoundingClientRect(); return {x:r.left-box.left+r.width/2,y:r.top-box.top+r.height/2}; };
+  let lines='';
+  for(const r of d.relations||[]){
+    const a=center(`[data-link="${CSS.escape((tabs_find_id(r.fromTable))+'|'+r.fromColumn)}"]`);
+    const b=center(`[data-link="${CSS.escape((tabs_find_id(r.toTable))+'|'+r.toColumn)}"]`);
+    if(!a||!b) continue;
+    lines+=`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#3b82f6" stroke-width="1.6" opacity=".65"/><circle cx="${b.x}" cy="${b.y}" r="3" fill="#3b82f6"/>`;
+  }
+  svg.innerHTML=lines;
+}
+function tabs_find_id(tname){ const t=(CACHE[FILES.tables].tables||[]).find(x=>x.name===tname); return t?t.id:''; }
 function renderTables(){
   const d=CACHE[FILES.tables];
+  try{ renderDiagram(d); }catch(e){ console.warn('diagrama:',e.message); }
   $('tables-list').innerHTML=d.tables.length?'<table><tr><th>Tabela</th><th>Colunas</th><th></th></tr>'+d.tables.map(t=>`<tr><td><strong class="mono">${esc(t.name)}</strong> ${lockTag(t)}<br><span class="muted">${esc((t.desc||'').slice(0,120))}</span></td><td>${(t.columns||[]).length}</td><td style="white-space:nowrap"><button class="sm" data-open-t="${esc(t.id)}">abrir</button>${lockBtn('tables','table',t.id,t.locked)}<button class="danger sm" data-del-t="${esc(t.id)}">x</button></td></tr>`).join('')+'</table>':'<span class="muted">Nenhuma tabela. Modele as entidades do sistema.</span>';
   $('tables-list').querySelectorAll('[data-open-t]').forEach(b=>b.onclick=()=>{OPEN_TABLE=b.dataset.openT;renderTableDetail();});
   $('tables-list').querySelectorAll('[data-del-t]').forEach(b=>b.onclick=()=>delTable(b.dataset.delT));
@@ -622,7 +816,9 @@ document.querySelectorAll('#tabs .tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('#tabs .tab').forEach(b=>b.classList.remove('active')); t.classList.add('active');
   document.querySelectorAll('.tabpanel').forEach(p=>p.style.display='none');
   $('tab-'+t.dataset.tab).style.display='';
+  if(t.dataset.tab==='tables'&&typeof drawWires==='function') requestAnimationFrame(drawWires);
 });
+window.addEventListener('resize',()=>{ const a=document.querySelector('#tabs .tab.active'); if(a&&a.dataset.tab==='tables'&&typeof drawWires==='function') drawWires(); });
 $('project').onchange=async e=>{ PROJECT=e.target.value; OPEN_PAGE=null; OPEN_TABLE=null; if(PROJECT) await reloadAll(); };
 $('btn-reload').onclick=reloadAll;
 $('f-kind').onchange=renderConcept; $('f-search').oninput=renderConcept;
