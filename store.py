@@ -29,11 +29,12 @@ TABLES_FILE = "tables.json"
 PROPOSALS_FILE = "proposals.json"
 DATA_FILES = (CONCEPT_FILE, SPRINT_FILE, PAGES_FILE, TABLES_FILE, PROPOSALS_FILE)
 
-MAX_FILE_BYTES = 512 * 1024
+MAX_FILE_BYTES = 2 * 1024 * 1024
 
 MAX_TITLE = 200
 MAX_DESC = 5000
 MAX_DETAILS = 20000
+MAX_PREVIEW = 600000  # previewHtml: captura estatica do resultado final da pagina
 MAX_COMMENT = 2000
 MAX_REASON = 2000
 
@@ -492,6 +493,9 @@ def validate_page(payload, partial=False):
         "route": _check_str(payload.get("route"), "route", MAX_TITLE, required=False),
         "desc": _check_str(payload.get("desc"), "desc", MAX_DESC, required=False),
     }
+    if "previewHtml" in payload:
+        out["previewHtml"] = _check_str(
+            payload.get("previewHtml"), "previewHtml", MAX_PREVIEW, required=False)
     out.update(_validate_tasks_field(payload, req))
     if out["route"] and not re.match(r"^[A-Za-z0-9/_.:-]{1,200}$", out["route"]):
         raise ValueError("route invalida")

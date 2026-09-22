@@ -182,6 +182,30 @@ def test_page_level_comment_on_final_result(root):
                           {"pageId": "p-que-nao-existe", "text": "x"})
 
 
+def test_page_preview_html_roundtrip(root):
+    """previewHtml: captura estática do resultado final (HTML+CSS inline)."""
+    pg = store.user_action(root, PROJ, "pages", "page", None, "create",
+                           {"name": "Login", "route": "/login",
+                            "previewHtml": "<!doctype html><html><head><style>.a{}</style>"
+                                           "</head><body><main>Entrar</main></body></html>"})
+    assert pg["previewHtml"].startswith("<!doctype html>")
+    got = store.load_data(root, PROJ, store.PAGES_FILE)
+    assert "Entrar" in got["pages"][0]["previewHtml"]
+    store.user_action(root, PROJ, "pages", "page", pg["id"], "update",
+                      {"previewHtml": "<html><body>sem css</body></html>"})
+    got2 = store.load_data(root, PROJ, store.PAGES_FILE)
+    assert got2["pages"][0]["previewHtml"] == "<html><body>sem css</body></html>"
+    # update sem previewHtml não apaga o existente
+    store.user_action(root, PROJ, "pages", "page", pg["id"], "update", {"desc": "ok"})
+    got3 = store.load_data(root, PROJ, store.PAGES_FILE)
+    assert got3["pages"][0]["previewHtml"] == "<html><body>sem css</body></html>"
+    assert got3["pages"][0]["desc"] == "ok"
+    # acima do limite → erro
+    with pytest.raises(ValueError):
+        store.user_action(root, PROJ, "pages", "page", pg["id"], "update",
+                          {"previewHtml": "x" * (store.MAX_PREVIEW + 1)})
+
+
 def test_tables_fk(root):
     users = store.user_action(root, PROJ, "tables", "table", None, "create", {"name": "users"})
     store.user_action(root, PROJ, "tables", "table-column", None, "create",

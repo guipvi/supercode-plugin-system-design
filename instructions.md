@@ -30,7 +30,10 @@ plugin (projeto conceitual, sprint, páginas, tabelas, propostas).
 - `sprint-task`: update|move|delete — `status` em backlog|doing|done
   (progresso e correções; `create` é rejeitado: tarefas nascem de
   aprovações, nunca avulsas).
-- `page`: create|update|delete. `page-element`: create|update|delete.
+- `page`: create|update|delete. `previewHtml` (update) aceita a captura
+  estática do resultado final da rota (HTML sem scripts + CSS inline) —
+  quando presente, a aba Páginas mostra esse preview na simulação em vez
+  da composição dos elementos. `page-element`: create|update|delete.
 - `page-comment`: comment — `{elementId|pageId, text}` (comentário do agente no elemento ou no resultado final da página).
 - `table`: create|update|delete. `table-column`: create|update|delete.
 - `relation`: create|update|delete.

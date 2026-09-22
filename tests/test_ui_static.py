@@ -163,3 +163,15 @@ def test_simulation_uses_real_design_html_and_css():
     # sem padding no bloco (layout igual ao final) e placeholder claro de imagem
     assert "padding:0;outline:2px dashed transparent" in html
     assert "#1a2130" not in html  # fundo escuro de painel não pode vazar pro iframe
+
+
+def test_page_preview_html_real_capture():
+    """previewHtml (captura do resultado real) tem prioridade na simulação."""
+    html = read_ui()
+    assert "function buildPreviewDoc(" in html
+    assert "function simBridgeJS(" in html
+    assert "pg.previewHtml?buildPreviewDoc(pg):buildSimDoc(ordered)" in html
+    assert "id=\"m-preview\"" in html
+    assert "previewHtml:$('m-preview').value" in html
+    assert "resultado real capturado" in html
+    assert "o.previewHtml=vStr" in html

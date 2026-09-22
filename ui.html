@@ -822,6 +822,7 @@ function applyPages(kind,tid,action,payload,actor){
 }
 function validatePage(p,partial){ const req=!partial; const o={};
   o.name=vStr(p.name,'name',200,req); o.route=vStr(p.route,'route',200,false); o.desc=vStr(p.desc,'desc',5000,false);
+  if('previewHtml' in p) o.previewHtml=vStr(p.previewHtml,'previewHtml',600000,false);
   if(o.route&&!/^[A-Za-z0-9/_.:-]{1,200}$/.test(o.route)) throw new Error('route invalida');
   if('elements' in p) o.elements=validateEmbeddedElements(p.elements);
   return o; }
@@ -852,8 +853,8 @@ function renderPages(){
 }
 function editPage(id){
   const p=CACHE[FILES.pages].pages.find(x=>x.id===id); if(!p) return;
-  openModal(`<h2 style="color:#93c5fd;margin-bottom:.5rem">Editar página</h2><div class="frm"><input type="text" id="m-name" value="${esc(p.name)}" maxlength="200"><input type="text" id="m-route" value="${esc(p.route||'')}" maxlength="200"><label>Descrição<textarea id="m-desc" maxlength="5000">${esc(p.desc||'')}</textarea></label></div><div class="row"><button id="m-save">Salvar</button><button class="ghost" onclick="closeModal()">Cancelar</button></div>`);
-  $('m-save').onclick=async()=>{ try{ applyChange('pages','page',id,'update',{name:$('m-name').value,route:$('m-route').value,desc:$('m-desc').value},'user'); await saveTabFile('pages'); closeModal(); renderAll(); msg('Página salva.',true);}catch(e){msg('Erro: '+e.message,false);} };
+  openModal(`<h2 style="color:#93c5fd;margin-bottom:.5rem">Editar página</h2><div class="frm"><input type="text" id="m-name" value="${esc(p.name)}" maxlength="200"><input type="text" id="m-route" value="${esc(p.route||'')}" maxlength="200"><label>Descrição<textarea id="m-desc" maxlength="5000">${esc(p.desc||'')}</textarea></label><label>Preview do resultado final (HTML capturado; vazio = composição dos elementos)<textarea id="m-preview" rows="4" style="font-family:monospace;font-size:.8rem">${esc(p.previewHtml||'')}</textarea></label></div><div class="row"><button id="m-save">Salvar</button><button class="ghost" onclick="closeModal()">Cancelar</button></div>`);
+  $('m-save').onclick=async()=>{ try{ applyChange('pages','page',id,'update',{name:$('m-name').value,route:$('m-route').value,desc:$('m-desc').value,previewHtml:$('m-preview').value},'user'); await saveTabFile('pages'); closeModal(); renderAll(); msg('Página salva.',true);}catch(e){msg('Erro: '+e.message,false);} };
 }
 async function delPage(id){ if(!confirm('Excluir página e seus elementos?')) return; try{ applyChange('pages','page',id,'delete',{},'user'); await saveTabFile('pages'); renderAll(); }catch(e){ msg('Erro: '+e.message,false); } }
 /* Renderiza o bloco como o usuário final veria (revisor clica para comentar) */
@@ -883,6 +884,23 @@ function splitSnap(html){
   let body=bm?bm[1]:html;
   body=body.replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'');
   return {body,css:sm};
+}
+function simBridgeJS(){
+  return `<script>(function(){
+document.addEventListener('click',function(ev){var t=ev.target;var b=t&&t.closest?t.closest('[data-sim-id]'):null;if(b){try{parent.postMessage({sim:'select',id:b.getAttribute('data-sim-id')},'*');}catch(e){}}var a=t&&t.closest?t.closest('a'):null;if(a)ev.preventDefault();},true);
+window.addEventListener('message',function(ev){var d=ev.data||{};if(d.sim!=='select'||!d.id)return;var all=document.querySelectorAll('.sim-block');for(var i=0;i<all.length;i++)all[i].classList.remove('sim-selected');var n=document.querySelector('[data-sim-id="'+d.id+'"]');if(n)n.classList.add('sim-selected');});
+function report(){try{var h=Math.max(document.body?document.body.scrollHeight:0,document.documentElement.scrollHeight,320);parent.postMessage({sim:'height',h:h},'*');}catch(e){}}
+window.addEventListener('load',report);setTimeout(report,80);setTimeout(report,500);
+})();<\/script>`;
+}
+function buildPreviewDoc(pg){
+  let doc=String(pg.previewHtml||'');
+  doc=doc.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'');
+  doc=doc.replace(/<link[^>]+(modulepreload|rel=["']preload["'][^>]+\.js)[^>]*>/gi,'');
+  const br=simBridgeJS();
+  if(/<\/body>/i.test(doc)) doc=doc.replace(/<\/body>/i,br+'</body>');
+  else doc=doc+br;
+  return doc;
 }
 function simBlockInner(el){
   if(!el.snapshotHtml) return `<div class="sim-fb">${pvRender(el)}</div>`;
@@ -923,12 +941,7 @@ ul{margin:.35rem 0 .35rem 1.2rem}
 .sim-block{position:relative;cursor:pointer;padding:0;outline:2px dashed transparent;outline-offset:-1px}
 .sim-block:hover{outline-color:rgba(37,99,235,.45)}
 .sim-block.sim-selected{outline:2px solid #2563eb;outline-offset:-1px;background:rgba(37,99,235,.05)}`;
-  const bridge=`<script>(function(){
-document.addEventListener('click',function(ev){var t=ev.target;var b=t&&t.closest?t.closest('[data-sim-id]'):null;if(b){try{parent.postMessage({sim:'select',id:b.getAttribute('data-sim-id')},'*');}catch(e){}}var a=t&&t.closest?t.closest('a'):null;if(a)ev.preventDefault();},true);
-window.addEventListener('message',function(ev){var d=ev.data||{};if(d.sim!=='select'||!d.id)return;var all=document.querySelectorAll('.sim-block');for(var i=0;i<all.length;i++)all[i].classList.remove('sim-selected');var n=document.querySelector('[data-sim-id="'+d.id+'"]');if(n)n.classList.add('sim-selected');});
-function report(){try{var h=Math.max(document.body?document.body.scrollHeight:0,document.documentElement.scrollHeight,320);parent.postMessage({sim:'height',h:h},'*');}catch(e){}}
-window.addEventListener('load',report);setTimeout(report,80);setTimeout(report,500);
-})();<\/script>`;
+  const bridge=simBridgeJS();
   return '<!doctype html><html><head><meta charset="utf-8"><style>'+base+css+'</style>'+links+'</head><body>'+blocks+bridge+'</body></html>';
 }
 function el_snap(e){ return e.snapshotHtml||''; }
@@ -978,13 +991,13 @@ function renderPageDetail(){
   if(PvSelected&&!ordered.some(e=>e.id===PvSelected)) PvSelected=null;
   const sel=PvSelected?ordered.find(e=>e.id===PvSelected):null;
   host.querySelector('#pd-head').innerHTML=`<h2>${esc(pg.name)}</h2>
-  <div class="pv-toolbar"><span class="route">${esc(pg.route||'sem rota')}</span><span class="muted">${ordered.length} elemento(s) · simulação da página final</span><span style="flex:1"></span><span class="muted">${esc((pg.desc||'').slice(0,160))}</span></div>`;
+  <div class="pv-toolbar"><span class="route">${esc(pg.route||'sem rota')}</span>${pg.previewHtml?'<span class="tag ok">resultado real capturado</span>':''}<span class="muted">${ordered.length} elemento(s) · ${pg.previewHtml?'preview do resultado final':'simulação da página final'}</span><span style="flex:1"></span><span class="muted">${esc((pg.desc||'').slice(0,160))}</span></div>`;
   const list=host.querySelector('#pv-list');
   if(!ordered.length){
     PvSim=null;
     list.innerHTML=`<div class="pv-page empty"><span class="muted">Sem elementos ainda. Adicione abaixo ou aguarde proposta do agente com <code>elements</code>.</span></div>`;
   } else {
-    const doc=buildSimDoc(ordered);
+    const doc=pg.previewHtml?buildPreviewDoc(pg):buildSimDoc(ordered);
     const reuse=PvSim&&PvSim.pageId===pg.id&&PvSim.doc===doc&&PvSim.node&&PvSim.node.parentNode===list;
     if(!reuse){
       list.innerHTML='';

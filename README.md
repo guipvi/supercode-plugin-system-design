@@ -28,10 +28,12 @@ para o sistema não conseguir mais alterá-lo.
 - **Sprint** — backlog, executando e executado por projeto (criar, mover,
   editar, travar tarefas).
 - **Páginas** — páginas + elementos com **comentários** por elemento e
-  **comentário sobre o resultado final da página**. A prévia é uma
-  **simulação da página final** (iframe único, elementos na ordem, usando
-  o design do editor visual quando existir) com clique para selecionar e
-  comentar blocos. Inclui um **editor visual open-source (GrapesJS, MIT)**
+  **comentário sobre o resultado final da página**. A prévia é a
+  **simulação da página final**: quando existe `previewHtml` (captura
+  estática da rota real, HTML+CSS inline) ela é exibida como o resultado
+  de verdade; sem preview, os elementos são montados na ordem (design do
+  editor visual quando existir) com clique para selecionar e comentar
+  blocos. Inclui um **editor visual open-source (GrapesJS, MIT)**
   carregado somente quando você clica em "editor visual" (com fallback
   para o formulário se o CDN estiver fora).
 - **Tabelas** — entidades, colunas (tipos, PK, FK, NOT NULL) e relações
