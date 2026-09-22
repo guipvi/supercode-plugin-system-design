@@ -478,10 +478,11 @@ function renderSprint(){
   const d=CACHE[FILES.sprint];
   $('sprint-cols').innerHTML=['backlog','doing','done'].map(st=>{
     const ts=d.tasks.filter(t=>t.status===st);
-    return `<div class="col"><h3>${STATUS_LABEL[st]} <span class="tag dim">${ts.length}</span></h3>`+(ts.length?ts.map(t=>`<div class="task"><div class="t">${esc(t.title)} ${lockTag(t)}</div><div class="muted">${esc((t.desc||'').slice(0,120))}</div><div class="muted">prioridade: ${esc(t.priority)}${t.assignee?' · '+esc(t.assignee):''}</div><div class="row" style="margin-top:.35rem">${st!=='backlog'?`<button class="ghost sm" data-mv="${esc(t.id)}|${st==='doing'?'backlog':'doing'}">←</button>`:''}${st!=='done'?`<button class="ghost sm" data-mv="${esc(t.id)}|${st==='backlog'?'doing':'done'}">→</button>`:''}<button class="ghost sm" data-edit-t="${esc(t.id)}">editar</button>${lockBtn('sprint','sprint-task',t.id,t.locked)}<button class="danger sm" data-del-t="${esc(t.id)}">x</button></div></div>`).join(''):'<span class="muted">vazio</span>')+`</div>`;
+    return `<div class="col"><h3>${STATUS_LABEL[st]} <span class="tag dim">${ts.length}</span></h3>`+(ts.length?ts.map(t=>`<div class="task"><div class="t">${esc(t.title)} ${lockTag(t)}</div><div class="muted">${esc((t.desc||'').slice(0,120))}</div><div class="muted">prioridade: ${esc(t.priority)}${t.assignee?' · '+esc(t.assignee):''}</div><div class="row" style="margin-top:.35rem">${st!=='backlog'?`<button class="ghost sm" data-mv="${esc(t.id)}|${st==='doing'?'backlog':'doing'}">←</button>`:''}${st!=='done'?`<button class="ghost sm" data-mv="${esc(t.id)}|${st==='backlog'?'doing':'done'}">→</button>`:''}<button class="ghost sm" data-edit-t="${esc(t.id)}">editar</button><button class="sm" data-exec-t="${esc(t.id)}" title="copia o prompt para executar esta tarefa no chat">▶ executar</button>${lockBtn('sprint','sprint-task',t.id,t.locked)}<button class="danger sm" data-del-t="${esc(t.id)}">x</button></div></div>`).join(''):'<span class="muted">vazio</span>')+`</div>`;
   }).join('');
   $('sprint-cols').querySelectorAll('[data-mv]').forEach(b=>b.onclick=()=>moveTask(b.dataset.mv.split('|')[0],b.dataset.mv.split('|')[1]));
   $('sprint-cols').querySelectorAll('[data-edit-t]').forEach(b=>b.onclick=()=>editTask(b.dataset.editT));
+  $('sprint-cols').querySelectorAll('[data-exec-t]').forEach(b=>b.onclick=()=>copyExecPrompt(b.dataset.execT));
   $('sprint-cols').querySelectorAll('[data-del-t]').forEach(b=>b.onclick=()=>delTask(b.dataset.delT));
   bindLocks($('sprint-cols'));
 }
@@ -495,6 +496,13 @@ function editTask(id){
   $('m-save').onclick=async()=>{ try{ applyChange('sprint','sprint-task',id,'update',{title:$('m-title').value,desc:$('m-desc').value,priority:$('m-prio').value,status:$('m-status').value,assignee:$('m-ass').value},'user'); await saveTabFile('sprint'); closeModal(); renderAll(); msg('Tarefa salva.',true);}catch(err){msg('Erro: '+err.message,false);} };
 }
 async function delTask(id){ if(!confirm('Excluir tarefa?')) return; try{ applyChange('sprint','sprint-task',id,'delete',{},'user'); await saveTabFile('sprint'); renderAll(); }catch(e){ msg('Erro: '+e.message,false); } }
+function copyExecPrompt(id){
+  const t=CACHE[FILES.sprint].tasks.find(x=>x.id===id); if(!t) return;
+  const txt=`No projeto ${PROJECT}, execute a tarefa de sprint "${t.title}" (id ${t.id}): leia a aba sprint via system_design_get, proponha mover para doing, faça o trabalho no repo, depois proponha mover para done com o resumo do que foi feito. Siga as regras do AGENTS.md.`;
+  const done=()=>msg('Prompt copiado: cole no chat para o agente executar.',true);
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(done).catch(()=>{ prompt('Copie e cole no chat:',txt); }); }
+  else prompt('Copie e cole no chat:',txt);
+}
 /* ================= aba: páginas ================= */
 let OPEN_PAGE=null;
 function applyPages(kind,tid,action,payload,actor){

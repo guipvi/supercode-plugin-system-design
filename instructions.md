@@ -103,3 +103,28 @@ Por isso, todo artefato que represente o sistema deve ser REGISTRADO:
   (proposals.json via `system_design_propose`) É a área de stage. Se as
   tools MCP estiverem indisponíveis, AVISE o usuário e aguarde — nunca
   despeje o conteúdo num arquivo solto "para depois".
+
+## Execução e status (aprovação vira trabalho)
+
+Aprovar NÃO executa: só registra. O trabalho acontece assim:
+
+1. Quando o usuário pedir para executar (ex.: "execute a tarefa X" ou
+   colar o prompt do botão "executar no chat"), leia a tarefa com
+   `system_design_get(project, "sprint")`.
+2. Proponha `sprint-task` action `move` para `doing` e aguarde aprovação.
+3. Faça o trabalho de verdade no repo (código, migração, doc — o que a
+   tarefa mandar), sem atalhos.
+4. Proponha `move` para `done` + uma proposta `page-comment`
+   (action `comment`) na página/elemento afetado com o resumo do que foi
+   feito (arquivos, comandos de verificação).
+5. Se travar, NÃO fique em silêncio: proponha `move` de volta para
+   `backlog` com o motivo em `reason` e explique ao usuário.
+
+## Relatório de status (dizer o que foi executado)
+
+Quando o usuário perguntar "o que já foi feito / está em execução",
+NUNCA responda de memória: leia na hora `system_design_get` das 4 abas
++ `system_design_list_proposals(project, "all")` e responda com números
+exatos: aprovadas aplicadas (por aba), pendentes aguardando avaliação,
+rejeitadas, tarefas por status (backlog/doing/done) e o próximo passo
+concreto. Sem leitura, sem resposta.
