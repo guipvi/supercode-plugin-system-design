@@ -66,3 +66,19 @@ deve vir acompanhada das propostas implicadas, no mesmo lote:
 Indique a cadeia no `reason` de cada proposta (ex.: "decorre do conceito
 'Checkout'; tarefa de implementação"). Se o usuário rejeitar o conceito,
 considere as propostas encadeadas órfãs e avise antes de re-propô-las.
+
+## Qualidade mínima (anti-genérico)
+
+O `propose` REJEITA com erro proposta genérica — não tente contornar,
+melhore o conteúdo:
+
+- `concept-element` / `sprint-task` / `page` em `create`: `description`
+  (ou `desc`) com 20+ caracteres reais. "Título + referência solta"
+  (ex.: só nome + arquivo) é rejeitado.
+- `concept-vision`: ao menos 1 dos 4 campos preenchido.
+- Regra de bolso: cada proposta deve responder *o quê*, *por quê* e
+  *onde vive no repo*. Elemento de interface/página sem descrição do
+  comportamento não entra nem no inbox.
+- Tabelas e relações são estruturadas (colunas/FKs dispensam texto
+  longo), mas coluna sem tipo correto ou FK para tabela inexistente
+  também é rejeitada.

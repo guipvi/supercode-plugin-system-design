@@ -103,7 +103,12 @@ if mcp is not None:
                               target_id: str = "", reason: str = "") -> dict:
         """Propõe uma mudança (vira pending; o usuário aprova pela UI).
         NUNCA edite os arquivos .opencode/system-design/ diretamente.
-        Alvos com locked=true são rejeitados. Conceito SEMPRE exige proposta.
+        Alvos com `locked=true` rejeitam propostas com erro.
+        QUALIDADE MINIMA (rejeitado com erro se generico): `concept-element`,
+        `sprint-task` e `page` em `create` exigem `description`/`desc` com 20+
+        caracteres reais (responsabilidades, regras, onde vive no repo);
+        `concept-vision` exige ao menos 1 campo preenchido. Nunca proponha
+        titulo + referencia solta.
         Args:
             project: id do projeto. tab: concept|sprint|pages|tables.
             target_kind: concept-element|sprint-task|page|page-element|page-comment|table|table-column|relation.

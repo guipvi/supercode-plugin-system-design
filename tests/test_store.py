@@ -222,3 +222,34 @@ def test_xss_payload_stored_neutrally(root):
     raw = store.data_file(root, PROJ, store.CONCEPT_FILE).read_text(encoding="utf-8")
     assert evil in raw  # armazenamento é neutro; a neutralização é na renderização (esc())
     assert el["title"] == evil
+
+
+def test_propose_rejects_generic_concept_element(root):
+    with pytest.raises(ValueError, match="generica"):
+        store.propose(root, PROJ, "concept", "concept-element", None, "create",
+                      {"kind": "interface", "title": "Frontend Web"})
+    with pytest.raises(ValueError, match="generica"):
+        store.propose(root, PROJ, "concept", "concept-element", None, "create",
+                      {"kind": "interface", "title": "X", "description": "curta"})
+    ok = store.propose(root, PROJ, "concept", "concept-element", None, "create",
+                       {"kind": "interface", "title": "Frontend Web",
+                        "description": "Responsavel pelas 26 rotas publicas em client/src com Tailwind"})
+    assert ok["status"] == "pending"
+
+
+def test_propose_rejects_generic_task_page_vision(root):
+    with pytest.raises(ValueError, match="generica"):
+        store.propose(root, PROJ, "sprint", "sprint-task", None, "create", {"title": "Fazer X"})
+    with pytest.raises(ValueError, match="generica"):
+        store.propose(root, PROJ, "pages", "page", None, "create", {"name": "Home", "route": "/"})
+    with pytest.raises(ValueError, match="generica"):
+        store.propose(root, PROJ, "concept", "concept-vision", None, "update", {})
+    ok = store.propose(root, PROJ, "sprint", "sprint-task", None, "create",
+                       {"title": "Fazer X", "desc": "Detalhar o fluxo de checkout ponta a ponta"})
+    assert ok["status"] == "pending"
+
+
+def test_user_direct_create_stays_free(root):
+    el = store.user_action(root, PROJ, "concept", "concept-element", None, "create",
+                           {"kind": "interface", "title": "Rascunho"})
+    assert el["id"]

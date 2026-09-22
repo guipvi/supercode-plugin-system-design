@@ -681,6 +681,45 @@ def _new_id(prefix):
     return f"{prefix}-{int(time.time() * 1000) % 100000000}-{random.randint(1000, 9999)}"
 
 
+# Qualidade minima anti-generico — vale SOMENTE no caminho do agente
+# (propose()). O usuario, editando direto via UI, continua livre.
+# Exige texto real (responsabilidades, regras, onde vive no repo) em vez de
+# titulo + referencia solta. Erro orienta o agente a re-propor melhor.
+MIN_RICH_TEXT = 20
+RICH_FIELDS = {
+    ("concept", "concept-element"): (("description", MIN_RICH_TEXT),
+                                     ("details", MIN_RICH_TEXT)),
+    ("sprint", "sprint-task"): (("desc", MIN_RICH_TEXT),),
+    ("pages", "page"): (("desc", MIN_RICH_TEXT),),
+    # visao: update vazio nao significa nada; exige ao menos 1 campo preenchido
+    ("concept", "concept-vision"): (("objective", 1), ("audience", 1),
+                                    ("scope", 1), ("nonGoals", 1)),
+}
+
+
+def _check_not_generic(tab, target_kind, action, payload):
+    """Rejeita proposta generica demais do agente (create; vision: update)."""
+    if action == "create":
+        spec = RICH_FIELDS.get((tab, target_kind))
+        if not spec:
+            return
+    elif action == "update" and (tab, target_kind) == ("concept", "concept-vision"):
+        spec = RICH_FIELDS[(tab, target_kind)]
+    else:
+        return
+    payload = payload or {}
+    for field, minimum in spec:
+        value = payload.get(field)
+        if isinstance(value, str) and len(value.strip()) >= minimum:
+            return
+    need = " ou ".join(f"'{f}' (≥{m} caracteres)" for f, m in spec)
+    raise ValueError(
+        f"proposta generica demais: {target_kind}.{action} do agente exige "
+        f"{need} com conteudo real (responsabilidades, regras, onde vive no "
+        f"repo). Releia a visao e re-proponha sem genericidade."
+    )
+
+
 def validate_proposal(tab, target_kind, target_id, action, payload, reason):
     _check_enum(tab, "tab", TABS)
     if target_kind not in TARGET_KINDS:
@@ -701,6 +740,7 @@ def propose(root, project, tab, target_kind, target_id, action, payload, reason=
     """Cria uma proposta de AGENTE (actor=agent). Valida locks e esquema."""
     validate_project_id(project)
     validate_proposal(tab, target_kind, target_id, action, payload or {}, reason)
+    _check_not_generic(tab, target_kind, action, payload or {})
     data = load_data(root, project, PROPOSALS_FILE)
     proposals = data.setdefault("proposals", [])
     pending = [p for p in proposals if p.get("status") == "pending"]
