@@ -495,7 +495,7 @@ def validate_page(payload, partial=False):
     out.update(_validate_tasks_field(payload, req))
     if out["route"] and not re.match(r"^[A-Za-z0-9/_.:-]{1,200}$", out["route"]):
         raise ValueError("route invalida")
-    if "elements" in payload and not partial:
+    if "elements" in payload:
         out["elements"] = _validate_embedded_page_elements(payload.get("elements"))
     return out
 

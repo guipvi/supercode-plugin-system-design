@@ -493,3 +493,19 @@ def test_agent_propose_snapshot_html_applies(root):
     store.decide(root, PROJ, prop["id"], True)
     got = store.load_data(root, PROJ, store.PAGES_FILE)["pages"][0]["elements"][0]
     assert "hero" in got["snapshotHtml"]
+
+
+def test_agent_can_backfill_page_elements_via_update(root):
+    pg = store.user_action(root, PROJ, "pages", "page", None, "create",
+                           {"name": "Vazia", "route": "/vazia",
+                            "desc": "Pagina que nasceu sem elementos"})
+    assert pg["elements"] == []
+    prop = store.propose(root, PROJ, "pages", "page", pg["id"], "update",
+                         {"elements": [
+                             {"type": "cabecalho", "label": "Titulo"},
+                             {"type": "texto", "label": "Corpo", "content": "ok"},
+                         ]},
+                         "preencher elementos da pagina vazia")
+    store.decide(root, PROJ, prop["id"], True)
+    got = store.load_data(root, PROJ, store.PAGES_FILE)["pages"][0]
+    assert [e["label"] for e in got["elements"]] == ["Titulo", "Corpo"]

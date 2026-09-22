@@ -678,7 +678,7 @@ function applyPages(kind,tid,action,payload,actor){
 function validatePage(p,partial){ const req=!partial; const o={};
   o.name=vStr(p.name,'name',200,req); o.route=vStr(p.route,'route',200,false); o.desc=vStr(p.desc,'desc',5000,false);
   if(o.route&&!/^[A-Za-z0-9/_.:-]{1,200}$/.test(o.route)) throw new Error('route invalida');
-  if('elements' in p&&!partial) o.elements=validateEmbeddedElements(p.elements);
+  if('elements' in p) o.elements=validateEmbeddedElements(p.elements);
   return o; }
 function validateEmbeddedElements(raw){
   if(raw==null) return [];

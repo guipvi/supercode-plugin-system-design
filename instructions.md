@@ -236,4 +236,5 @@ imagem|lista|navegacao|outro. `order` define a pilha visual; `snapshotHtml`
 (opcional) é a última versão HTML do bloco (editor visual) e é o que a UI
 mostra na prévia ao abrir a página. Elementos novos depois vão em
 `page-element` create; design visual em `page-element` update com
-`snapshotHtml`.
+`snapshotHtml`. Páginas já existentes sem elementos: proponha `page`
+action `update` com `elements` (mesmo formato) para preencher de uma vez.
