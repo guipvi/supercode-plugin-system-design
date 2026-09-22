@@ -82,3 +82,19 @@ melhore o conteúdo:
 - Tabelas e relações são estruturadas (colunas/FKs dispensam texto
   longo), mas coluna sem tipo correto ou FK para tabela inexistente
   também é rejeitada.
+
+## Artefatos sempre registrados (nada solto)
+
+A aba design só enxerga os 5 JSONs de `.opencode/system-design/` — PDF,
+imagem, planilha, doc ou diagrama solto no projeto é INVISÍVEL para ela.
+Por isso, todo artefato que represente o sistema deve ser REGISTRADO:
+
+- Gerou um arquivo para o projeto (ex.: cronograma PDF, mock, diagrama)?
+  Crie na mesma hora uma proposta `page-comment` (action `comment`)
+  com `{elementId, text}` onde `text` traz o **path do arquivo + o que
+  ele representa** — ou um `concept-element` com o path em
+  `description`/`details`.
+- Nunca considere "entregue" um arquivo que não esteja referenciado em
+  proposta aprovada ou pendente. Arquivo solto = trabalho invisível.
+- Vale também para outputs de sandbox/downloads: copie para dentro do
+  projeto e registre; `downloads/` e `/tmp/` não são o projeto.
