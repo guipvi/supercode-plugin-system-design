@@ -52,10 +52,26 @@ def test_grapes_pinned_and_on_demand():
     assert "openVisualEditor" in html
 
 
-def test_approve_disabled_when_locked():
+def test_no_locks_in_ui():
     html = read_ui()
-    assert "Destrave o alvo para aprovar" in html
-    assert "data-approve" in html
+    for token in ("data-lock", "lockTag", "lockBtn", "bindLocks",
+                  "toggleLock", "travad", "bloquead", "\U0001f512"):
+        assert token not in html and token not in html.lower(), f"resto de trava: {token}"
+
+
+def test_proposals_tab_and_deck():
+    html = read_ui()
+    assert 'data-tab="proposals"' in html
+    assert "btn-yes" in html and "btn-no" in html
+    assert "tab-proposals-badge" in html
+
+
+def test_sprint_filters_and_exec():
+    html = read_ui()
+    for eid in ("s-search", "s-origin", "s-priority", "sprint-count"):
+        assert f'id="{eid}"' in html, f"filtro ausente: {eid}"
+    assert "data-exec-t" in html
+    assert "btn-add-task" not in html
 
 
 def test_project_id_validated_client_side():

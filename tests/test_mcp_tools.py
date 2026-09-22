@@ -47,15 +47,21 @@ def test_propose_and_list(root):
     assert len(lst["proposals"]) == 1
 
 
-def test_propose_locked_rejected(root):
-    import store
-    el = store.user_action(root, "demo", "concept", "concept-element", None, "create",
-                           {"kind": "page", "title": "Home"})
-    store.set_lock(root, "demo", "concept", "concept-element", el["id"], True)
-    out = mcp_server.tool_propose("demo", "concept", "concept-element", "update",
-                                  '{"title": "X"}', el["id"], "tentativa")
+def test_propose_standalone_task_rejected(root):
+    out = mcp_server.tool_propose("demo", "sprint", "sprint-task", "create",
+                                  '{"title": "Fazer X"}', None, "")
     assert out["ok"] is False
-    assert "bloqueado" in out["error"]
+    assert "aceitas a parte" in out["error"]
+
+
+def test_propose_package_accepted(root):
+    out = mcp_server.tool_propose(
+        "demo", "concept", "concept-element", "create",
+        '{"kind": "page", "title": "Home", '
+        '"description": "Pagina inicial publica do marketplace", '
+        '"tasks": [{"title": "Montar hero"}]}', None, "pacote")
+    assert out["ok"] is True
+    assert out["proposal"]["status"] == "pending"
 
 
 def test_propose_bad_payload_json(root):

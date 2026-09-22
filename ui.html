@@ -31,7 +31,6 @@ table{width:100%;border-collapse:collapse;font-size:.8rem}
 th,td{text-align:left;padding:.4rem .5rem;border-bottom:1px solid #232a3a;vertical-align:top}
 th{color:#8b93a7;font-weight:500}
 .tag{display:inline-block;background:#1e3a5f;border:1px solid #3b82f6;border-radius:10px;padding:.08rem .5rem;font-size:.72rem;color:#93c5fd;margin:.08rem}
-.tag.locked{background:#3a1b1b;border-color:#7f1d1d;color:#f87171}
 .tag.ok{background:#14532d;border-color:#1f7a33;color:#7ddf9b}
 .tag.dim{background:#1a1a2e;border-color:#4a4a6a;color:#a0a0c0}
 .cols3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.7rem}
@@ -99,7 +98,7 @@ iframe.preview{width:100%;height:220px;border:1px solid #2b3345;border-radius:6p
 </head>
 <body>
 <h1>System Design</h1>
-<div class="sub">Projeto conceitual, sprint, páginas e tabelas. O chat propõe mudanças — você aprova. Cadeado 🔒 impede o sistema de alterar.</div>
+<div class="sub">Projeto conceitual, sprint, páginas e tabelas. O chat propõe mudanças — você aprova. Aprovar origem gera as tarefas; reescreva e mova à vontade.</div>
 
 <div class="topbar">
   <label for="project">Projeto:</label>
@@ -161,15 +160,13 @@ iframe.preview{width:100%;height:220px;border:1px solid #2b3345;border-radius:6p
 
 <section id="tab-sprint" class="tabpanel" style="display:none">
   <div class="card">
-    <h2>Backlog por projeto</h2>
-    <div class="frm">
-      <div class="row">
-        <input type="text" id="t-title" class="grow" placeholder="Nova tarefa (até 200)" maxlength="200">
-        <select id="t-priority"><option value="media">media</option><option value="baixa">baixa</option><option value="alta">alta</option></select>
-      </div>
-      <label>Descrição<textarea id="t-desc" maxlength="5000"></textarea></label>
+    <h2>Quadro de tarefas <span class="hint">(nascem de aprovações: conceito, página, tabela)</span></h2>
+    <div class="row" style="margin-bottom:.5rem">
+      <input type="text" id="s-search" class="grow" placeholder="Buscar tarefa..." maxlength="120">
+      <select id="s-origin"><option value="">Todas as origens</option><option value="concept">conceito</option><option value="pages">página</option><option value="tables">tabela</option><option value="none">sem origem (avulsa)</option></select>
+      <select id="s-priority"><option value="">Todas prioridades</option><option value="baixa">baixa</option><option value="media">media</option><option value="alta">alta</option></select>
     </div>
-    <button id="btn-add-task">Adicionar ao backlog</button>
+    <div class="muted" id="sprint-count"></div>
   </div>
   <div class="cols3" id="sprint-cols"></div>
 </section>
@@ -184,6 +181,7 @@ iframe.preview{width:100%;height:220px;border:1px solid #2b3345;border-radius:6p
       <input type="text" id="p-route" placeholder="Rota ex.: /checkout" maxlength="200">
       <input type="text" id="p-desc" class="grow" placeholder="Descrição (até 5000)" maxlength="5000">
       <button id="btn-add-page">Adicionar</button>
+      <label style="flex:1 1 100%">Tarefas implicadas (uma por linha: Título | descrição | backlog/doing/done)<textarea id="p-tasks" placeholder="Ex.: Montar hero | proposta de valor | backlog"></textarea></label>
     </div>
   </div>
   <div id="page-detail"></div>
@@ -198,6 +196,7 @@ iframe.preview{width:100%;height:220px;border:1px solid #2b3345;border-radius:6p
       <input type="text" id="tb-name" placeholder="nome_da_tabela" maxlength="120">
       <input type="text" id="tb-desc" class="grow" placeholder="Descrição" maxlength="5000">
       <button id="btn-add-table">Adicionar</button>
+      <label style="flex:1 1 100%">Tarefas implicadas (uma por linha: Título | descrição | backlog/doing/done)<textarea id="tb-tasks" placeholder="Ex.: Criar migration | drizzle | backlog"></textarea></label>
     </div>
   </div>
   <div class="card">
@@ -281,8 +280,6 @@ const ENUMS={kind:['interface','page','function','algorithm'],priority:['baixa',
 function vStr(v,what,max,required=true){ if(v==null||v===''){ if(required) throw new Error(what+' obrigatorio'); return ''; } v=String(v).trim(); if(required&&!v) throw new Error(what+' obrigatorio'); if(v.length>max) throw new Error(what+' excede '+max+' caracteres'); return v; }
 function vEnum(v,what,allowed,def){ if(v==null||v==='') return def; if(!allowed.includes(v)) throw new Error(what+' invalido'); return v; }
 function vTableName(n,siblings){ n=vStr(n,'name',120); if(!/^[A-Za-z_][A-Za-z0-9_]{0,119}$/.test(n)) throw new Error('nome invalido (letras, numeros e _)'); if(siblings.map(s=>s.toLowerCase()).includes(n.toLowerCase())) throw new Error('ja existe: '+n); return n; }
-function lockTag(it){ return it&&it.locked?'<span class="tag locked">🔒 travado</span>':''; }
-function lockBtn(tab,kind,id,locked){ return `<button class="ghost sm" data-lock="${esc(tab)}|${esc(kind)}|${esc(id)}|${locked?0:1}">${locked?'🔓 destravar':'🔒 travar'}</button>`; }
 function fmtDate(iso){ try{ return new Date(iso).toLocaleString('pt-BR'); }catch(e){ return iso||''; } }
 
 /* ================= propostas (inbox + aprovar/rejeitar) ================= */
@@ -326,10 +323,10 @@ function describeProposal(p){
     if(act==='create') return {glance:`Nova tarefa: ${t||'(sem título)'}`, why:`${first('desc','description')||p.reason||''}`.slice(0,220)};
     return {glance:`${act==='delete'?'Remover':'Ajustar'} tarefa: ${t||p.targetId||''}`, why:(p.reason||'').slice(0,220)};
   }
-  if(kind==='page') return {glance:`${act==='create'?'Nova página':act==='delete'?'Remover página':'Ajustar página'}: ${first('name')||p.targetId||''}${pl.route?' ('+pl.route+')':''}`, why:`${first('desc','description')||p.reason||''}`.slice(0,220)};
+  if(kind==='page') return {glance:`${act==='create'?'Nova página':act==='delete'?'Remover página':'Ajustar página'}: ${first('name')||p.targetId||''}${pl.route?' ('+pl.route+')':''}`, why:`${first('desc','description')||p.reason||''}${tasksTxt(pl)}`.slice(0,320)};
   if(kind==='page-element') return {glance:`Novo bloco [${pl.type||'?'}]: ${first('label')||''}`, why:`${first('content')||p.reason||''}`.slice(0,220)};
   if(kind==='page-comment') return {glance:`Comentário do chat: “${first('text').slice(0,90)}”`, why:(p.reason||'Opinião do agente sobre o design.').slice(0,220)};
-  if(kind==='table') return {glance:`${act==='create'?'Nova tabela':act==='delete'?'Remover tabela':'Ajustar tabela'}: ${first('name')||p.targetId||''}`, why:`${Array.isArray(pl.columns)?pl.columns.length+' colunas · ':''}${first('desc')||p.reason||''}`.slice(0,220)};
+  if(kind==='table') return {glance:`${act==='create'?'Nova tabela':act==='delete'?'Remover tabela':'Ajustar tabela'}: ${first('name')||p.targetId||''}`, why:`${Array.isArray(pl.columns)?pl.columns.length+' colunas · ':''}${first('desc')||p.reason||''}${tasksTxt(pl)}`.slice(0,320)};
   if(kind==='table-column') return {glance:`Nova coluna: ${first('name')||''}${pl.type?' ('+pl.type+')':''}`, why:(p.reason||'').slice(0,220)};
   if(kind==='relation') return {glance:`Ligar ${first('fromTable','from')}.${first('fromColumn')} → ${first('toTable','to')}.${first('toColumn')}`, why:`cardinalidade ${pl.cardinality||'1:N'}${p.reason?' · '+p.reason:''}`.slice(0,220)};
   return {glance:`${act} ${kind}`, why:(p.reason||'').slice(0,220)};
@@ -345,6 +342,7 @@ function visualFor(p){
   if(p.targetKind==='page') return `<div class="tvisual"><strong style="font-size:1.2rem">${esc(pl.name||'')}</strong><br><span class="mono muted">${esc(pl.route||'')}</span></div>`;
   return '';
 }
+function tasksTxt(pl){ const tk=Array.isArray((pl||{}).tasks)?pl.tasks.filter(x=>x&&x.title):[]; return tk.length?` 📋 ${tk.length} tarefa(s) incluída(s): ${tk.map(x=>x.title+(x.status&&x.status!=='backlog'?' ('+x.status+')':'')).join('; ').slice(0,140)}`:''; }
 function renderInbox(){
   const all=pendingProps();
   $('pending-count').textContent=all.length;
@@ -356,13 +354,11 @@ function renderInbox(){
   const host=$('inbox');
   if(!list.length){ host.innerHTML='<span class="muted">Nenhuma proposta pendente. Quando o chat quiser mudar algo, aparece aqui para você aprovar.</span>'; return; }
   const p=list[DECK_IDX];
-  const tgt=p.targetId?findTarget(p.tab,p.targetKind,p.targetId):null;
-  const locked=tgt&&tgt.locked;
   const d=describeProposal(p);
   host.innerHTML=`<div id="deck-wrap"><div id="deck-count">${DECK_IDX+1} de ${list.length} pendentes</div>
   <div id="deck"><div class="tcard" id="tcard">
     <span class="stamp yes" id="stamp-yes">APROVAR</span><span class="stamp no" id="stamp-no">REJEITAR</span>
-    <div><span class="tag dim">${esc(p.action||'')}</span> <span class="tag">${esc(p.tab||'')} · ${esc(p.targetKind||'')}</span> ${locked?'<span class="tag locked">🔒 travado</span>':''}</div>
+    <div><span class="tag dim">${esc(p.action||'')}</span> <span class="tag">${esc(p.tab||'')} · ${esc(p.targetKind||'')}</span></div>
     <div class="tglance">${esc(d.glance)}</div>
     ${d.why?`<div class="twhy">${esc(d.why)}</div>`:''}
     ${visualFor(p)}
@@ -375,14 +371,14 @@ function renderInbox(){
   <div class="deck-btns">
     <button id="btn-no" title="Rejeitar">✕</button>
     <button id="btn-skip" title="Pular">⏭</button>
-    <button id="btn-yes" title="Aprovar" ${locked?'disabled title="Destrave o alvo para aprovar"':''}>✓</button>
+    <button id="btn-yes" title="Aprovar">✓</button>
   </div></div>`;
   $('btn-yes').onclick=()=>decideProposal(p.id,true);
   $('btn-no').onclick=()=>decideProposal(p.id,false);
   $('btn-skip').onclick=()=>{ DECK_SKIP.add(p.id); DECK_IDX++; renderInbox(); };
-  bindSwipe($('tcard'),p.id,locked);
+  bindSwipe($('tcard'),p.id);
 }
-function bindSwipe(card,id,locked){
+function bindSwipe(card,id){
   let sx=0,dx=0,drag=false;
   const yes=$('stamp-yes'),no=$('stamp-no');
   const interactive=t=>t&&t.closest&&(t.closest('button,summary,a,input,textarea,select,iframe')!==null);
@@ -393,7 +389,7 @@ function bindSwipe(card,id,locked){
     yes.style.opacity=Math.max(0,Math.min(1,dx/90)); no.style.opacity=Math.max(0,Math.min(1,-dx/90)); };
   const end=()=>{ if(!drag) return; drag=false;
     card.style.transition='transform .22s ease';
-    if(dx>90&&!locked){ card.style.transform='translateX(120%) rotate(14deg)'; setTimeout(()=>decideProposal(id,true),200); }
+    if(dx>90){ card.style.transform='translateX(120%) rotate(14deg)'; setTimeout(()=>decideProposal(id,true),200); }
     else if(dx<-90){ card.style.transform='translateX(-120%) rotate(-14deg)'; setTimeout(()=>decideProposal(id,false),200); }
     else { card.style.transform=''; yes.style.opacity=0; no.style.opacity=0; }
     dx=0; };
@@ -405,8 +401,6 @@ async function decideProposal(id,approve){
     const p=props.proposals.find(x=>x.id===id);
     if(!p||p.status!=='pending') throw new Error('proposta nao encontrada');
     if(!approve){ p.status='rejected'; p.decidedAt=new Date().toISOString(); await saveFile(FILES.proposals,props); renderAll(); msg('Proposta rejeitada.',true); return; }
-    const tgt=p.targetId?findTarget(p.tab,p.targetKind,p.targetId):null;
-    if(tgt&&tgt.locked) throw new Error('alvo travado: destrave para aprovar');
     applyChange(p.tab,p.targetKind,p.targetId,p.action,p.payload||{},'agent-aprovado');
     await saveTabFile(p.tab);
     await saveSprintIfDirty();
@@ -424,19 +418,16 @@ function applyChange(tab,kind,tid,action,payload,actor){
     const d=CACHE[FILES.concept];
     if(kind==='concept-vision'){ for(const k of ['objective','audience','scope','nonGoals']) if(k in payload) d.vision[k]=vStr(payload[k],k,5000,false); d.visionUpdatedBy=actor; d.visionUpdatedAt=new Date().toISOString(); return d.vision; }
     const els=d.elements;
-    if(action==='create'){ if(els.length>=500) throw new Error('limite de elementos'); const el={id:vId(payload.id||uid('e')),kind:vEnum(payload.kind,'kind',ENUMS.kind,'interface'),title:vStr(payload.title,'title',200),description:vStr(payload.description,'description',5000,false),details:vStr(payload.details,'details',20000,false),tasks:Array.isArray(payload.tasks)?payload.tasks.map(vTaskBrief):[],locked:false,lockedBy:null,lockedAt:null,updatedBy:actor,updatedAt:new Date().toISOString()}; els.push(el); spawnImpliedTasksUI(el,actor); return el; }
+    if(action==='create'){ if(els.length>=500) throw new Error('limite de elementos'); const el={id:vId(payload.id||uid('e')),kind:vEnum(payload.kind,'kind',ENUMS.kind,'interface'),title:vStr(payload.title,'title',200),description:vStr(payload.description,'description',5000,false),details:vStr(payload.details,'details',20000,false),tasks:Array.isArray(payload.tasks)?payload.tasks.map(vTaskBrief):[],updatedBy:actor,updatedAt:new Date().toISOString()}; els.push(el); spawnImpliedTasksUI(el,actor,{tab:'concept',kind:'concept-element'}); return el; }
     const it=els.find(e=>e.id===tid); if(!it) throw new Error('elemento nao encontrado');
-    if(actor!=='user'&&!actor.startsWith('agent-aprovado')&&it.locked) throw new Error('elemento bloqueado');
-    if(actor==='agent'&&it.locked) throw new Error('elemento bloqueado');
-    if(action==='update'){ if('kind' in payload) it.kind=vEnum(payload.kind,'kind',ENUMS.kind); if('title' in payload) it.title=vStr(payload.title,'title',200); if('description' in payload) it.description=vStr(payload.description,'description',5000,false); if('details' in payload) it.details=vStr(payload.details,'details',20000,false); if('tasks' in payload) it.tasks=Array.isArray(payload.tasks)?payload.tasks.map(vTaskBrief):[]; it.updatedBy=actor; it.updatedAt=new Date().toISOString(); spawnImpliedTasksUI(it,actor); return it; }
+    if(action==='update'){ if('kind' in payload) it.kind=vEnum(payload.kind,'kind',ENUMS.kind); if('title' in payload) it.title=vStr(payload.title,'title',200); if('description' in payload) it.description=vStr(payload.description,'description',5000,false); if('details' in payload) it.details=vStr(payload.details,'details',20000,false); if('tasks' in payload) it.tasks=Array.isArray(payload.tasks)?payload.tasks.map(vTaskBrief):[]; it.updatedBy=actor; it.updatedAt=new Date().toISOString(); spawnImpliedTasksUI(it,actor,{tab:'concept',kind:'concept-element'}); return it; }
     if(action==='delete'){ d.elements=els.filter(e=>e.id!==tid); return {deleted:tid}; }
     throw new Error('acao invalida');
   }
   if(tab==='sprint'){
     const d=CACHE[FILES.sprint];
-    if(action==='create'){ if(d.tasks.length>=1000) throw new Error('limite de tarefas'); const t={id:vId(payload.id||uid('t')),title:vStr(payload.title,'title',200),desc:vStr(payload.desc,'desc',5000,false),priority:vEnum(payload.priority,'priority',ENUMS.priority,'media'),status:vEnum(payload.status,'status',ENUMS.status,'backlog'),assignee:vStr(payload.assignee,'assignee',120,false),locked:false,lockedBy:null,lockedAt:null,createdBy:actor,createdAt:new Date().toISOString(),updatedBy:actor,updatedAt:new Date().toISOString()}; d.tasks.push(t); return t; }
+    if(action==='create'){ if(d.tasks.length>=1000) throw new Error('limite de tarefas'); const t={id:vId(payload.id||uid('t')),title:vStr(payload.title,'title',200),desc:vStr(payload.desc,'desc',5000,false),priority:vEnum(payload.priority,'priority',ENUMS.priority,'media'),status:vEnum(payload.status,'status',ENUMS.status,'backlog'),assignee:vStr(payload.assignee,'assignee',120,false),createdBy:actor,createdAt:new Date().toISOString(),updatedBy:actor,updatedAt:new Date().toISOString()}; d.tasks.push(t); return t; }
     const t=d.tasks.find(x=>x.id===tid); if(!t) throw new Error('tarefa nao encontrada');
-    if((actor==='agent')&&t.locked) throw new Error('tarefa bloqueada');
     if(action==='update'||action==='move'){ if('title' in payload) t.title=vStr(payload.title,'title',200); if('desc' in payload) t.desc=vStr(payload.desc,'desc',5000,false); if('priority' in payload) t.priority=vEnum(payload.priority,'priority',ENUMS.priority); if('status' in payload) t.status=vEnum(payload.status,'status',ENUMS.status); if('assignee' in payload) t.assignee=vStr(payload.assignee,'assignee',120,false); t.updatedBy=actor; t.updatedAt=new Date().toISOString(); return t; }
     if(action==='delete'){ d.tasks=d.tasks.filter(x=>x.id!==tid); return {deleted:tid}; }
     throw new Error('acao invalida');
@@ -460,7 +451,7 @@ function spawnImpliedTasksUI(el,actor){
     const title=String(it.title||'').trim();
     if(!title||existing.has(title.toLowerCase())) continue;
     const now=new Date().toISOString();
-    tasks.push({id:vId(it.id||uid('t')),title:title.slice(0,200),desc:String(it.desc||'').slice(0,5000),priority:ENUMS.priority.includes(it.priority)?it.priority:'media',status:ENUMS.status.includes(it.status)?it.status:'backlog',locked:false,lockedBy:null,lockedAt:null,createdBy:actor+':conceito',createdAt:now,updatedBy:actor,updatedAt:now});
+    tasks.push({id:vId(it.id||uid('t')),title:title.slice(0,200),desc:String(it.desc||'').slice(0,5000),priority:ENUMS.priority.includes(it.priority)?it.priority:'media',status:ENUMS.status.includes(it.status)?it.status:'backlog',createdBy:actor+':conceito',createdAt:now,updatedBy:actor,updatedAt:now});
     existing.add(title.toLowerCase()); created.push(tasks[tasks.length-1]);
   }
   if(created.length) SPRINT_DIRTY=true;
@@ -476,15 +467,14 @@ function renderConcept(){
   $('vision-meta').textContent=d.visionUpdatedAt?('atualizado '+fmtDate(d.visionUpdatedAt)+' por '+esc(d.visionUpdatedBy||'')):'';
   const kind=$('f-kind').value, q=($('f-search').value||'').toLowerCase();
   const els=(d.elements||[]).filter(e=>(!kind||e.kind===kind)&&(!q||(e.title+' '+e.description+' '+e.details).toLowerCase().includes(q)));
-  $('concept-list').innerHTML=els.length?'<table><tr><th>Elemento</th><th>Tipo</th><th></th></tr>'+els.map(e=>`<tr><td><strong>${esc(e.title)}</strong> ${lockTag(e)}<br><span class="muted">${esc((e.description||'').slice(0,160))}</span><br><span class="muted mono">${esc(e.id)} · ${esc(fmtDate(e.updatedAt))}</span></td><td><span class="tag dim">${esc(e.kind)}</span></td><td style="white-space:nowrap"><button class="ghost sm" data-view-el="${esc(e.id)}">ver</button> <button class="ghost sm" data-edit-el="${esc(e.id)}">editar</button> ${lockBtn('concept','concept-element',e.id,e.locked)} <button class="danger sm" data-del-el="${esc(e.id)}">excluir</button></td></tr>`).join('')+'</table>':'<span class="muted">Nenhum elemento. Descreva acima como o sistema deve funcionar.</span>';
+  $('concept-list').innerHTML=els.length?'<table><tr><th>Elemento</th><th>Tipo</th><th></th></tr>'+els.map(e=>`<tr><td><strong>${esc(e.title)}</strong> <br><span class="muted">${esc((e.description||'').slice(0,160))}</span><br><span class="muted mono">${esc(e.id)} · ${esc(fmtDate(e.updatedAt))}</span></td><td><span class="tag dim">${esc(e.kind)}</span></td><td style="white-space:nowrap"><button class="ghost sm" data-view-el="${esc(e.id)}">ver</button> <button class="ghost sm" data-edit-el="${esc(e.id)}">editar</button>  <button class="danger sm" data-del-el="${esc(e.id)}">excluir</button></td></tr>`).join('')+'</table>':'<span class="muted">Nenhum elemento. Descreva acima como o sistema deve funcionar.</span>';
   $('concept-list').querySelectorAll('[data-view-el]').forEach(b=>b.onclick=()=>viewElement(b.dataset.viewEl));
   $('concept-list').querySelectorAll('[data-edit-el]').forEach(b=>b.onclick=()=>editElement(b.dataset.editEl));
   $('concept-list').querySelectorAll('[data-del-el]').forEach(b=>b.onclick=()=>delElement(b.dataset.delEl));
-  bindLocks($('concept-list'));
 }
 function viewElement(id){
   const e=CACHE[FILES.concept].elements.find(x=>x.id===id); if(!e) return;
-  openModal(`<h2 style="color:#93c5fd;margin-bottom:.5rem">${esc(e.title)} ${lockTag(e)}</h2><p><span class="tag dim">${esc(e.kind)}</span> <span class="muted mono">${esc(e.id)}</span></p><h3>Descrição</h3><p style="white-space:pre-wrap">${esc(e.description||'—')}</p><h3>Detalhes</h3><p style="white-space:pre-wrap">${esc(e.details||'—')}</p><div class="row" style="margin-top:.8rem"><button class="ghost" onclick="closeModal()">Fechar</button></div>`);
+  openModal(`<h2 style="color:#93c5fd;margin-bottom:.5rem">${esc(e.title)} </h2><p><span class="tag dim">${esc(e.kind)}</span> <span class="muted mono">${esc(e.id)}</span></p><h3>Descrição</h3><p style="white-space:pre-wrap">${esc(e.description||'—')}</p><h3>Detalhes</h3><p style="white-space:pre-wrap">${esc(e.details||'—')}</p><div class="row" style="margin-top:.8rem"><button class="ghost" onclick="closeModal()">Fechar</button></div>`);
 }
 function editElement(id){
   const e=CACHE[FILES.concept].elements.find(x=>x.id===id); if(!e) return;
@@ -499,17 +489,34 @@ async function delElement(id){
 
 /* ================= aba: sprint ================= */
 const STATUS_LABEL={backlog:'Backlog',doing:'Executando',done:'Executado'};
-function renderSprint(){
+function originTag(t){ const o=t.origin||{}; if(!o.tab) return '<span class="tag dim">avulsa</span>'; const label=o.title||o.id||o.kind||''; return `<span class="tag" title="${esc(o.tab)} · ${esc(o.kind||'')} · ${esc(o.id||'')}">↩ ${esc(o.tab)}${label?': '+esc(String(label).slice(0,40)):''}</span>`; }
+function sprintFiltered(){
   const d=CACHE[FILES.sprint];
+  const q=(($('s-search')||{}).value||'').toLowerCase();
+  const og=(($('s-origin')||{}).value||'');
+  const pr=(($('s-priority')||{}).value||'');
+  return (d.tasks||[]).filter(t=>{
+    if(q&&!(t.title+' '+(t.desc||'')).toLowerCase().includes(q)) return false;
+    const ot=(t.origin||{}).tab||'';
+    if(og==='none'){ if(ot) return false; }
+    else if(og&&ot!==og) return false;
+    if(pr&&t.priority!==pr) return false;
+    return true;
+  });
+}
+function renderSprint(){
+  const all=(CACHE[FILES.sprint].tasks)||[];
+  const list=sprintFiltered();
+  const cnt=$('sprint-count');
+  if(cnt) cnt.textContent=list.length===all.length?`${all.length} tarefa(s)`:`${list.length} de ${all.length} (filtradas)`;
   $('sprint-cols').innerHTML=['backlog','doing','done'].map(st=>{
-    const ts=d.tasks.filter(t=>t.status===st);
-    return `<div class="col"><h3>${STATUS_LABEL[st]} <span class="tag dim">${ts.length}</span></h3>`+(ts.length?ts.map(t=>`<div class="task"><div class="t">${esc(t.title)} ${lockTag(t)}</div><div class="muted">${esc((t.desc||'').slice(0,120))}</div><div class="muted">prioridade: ${esc(t.priority)}${t.assignee?' · '+esc(t.assignee):''}</div><div class="row" style="margin-top:.35rem">${st!=='backlog'?`<button class="ghost sm" data-mv="${esc(t.id)}|${st==='doing'?'backlog':'doing'}">←</button>`:''}${st!=='done'?`<button class="ghost sm" data-mv="${esc(t.id)}|${st==='backlog'?'doing':'done'}">→</button>`:''}<button class="ghost sm" data-edit-t="${esc(t.id)}">editar</button><button class="sm" data-exec-t="${esc(t.id)}" title="copia o prompt para executar esta tarefa no chat">▶ executar</button>${lockBtn('sprint','sprint-task',t.id,t.locked)}<button class="danger sm" data-del-t="${esc(t.id)}">x</button></div></div>`).join(''):'<span class="muted">vazio</span>')+`</div>`;
+    const ts=list.filter(t=>t.status===st);
+    return `<div class="col"><h3>${STATUS_LABEL[st]} <span class="tag dim">${ts.length}</span></h3>`+(ts.length?ts.map(t=>`<div class="task"><div class="t">${esc(t.title)} </div><div>${originTag(t)}</div><div class="muted">${esc((t.desc||'').slice(0,120))}</div><div class="muted">prioridade: ${esc(t.priority)}${t.assignee?' · '+esc(t.assignee):''}</div><div class="row" style="margin-top:.35rem">${st!=='backlog'?`<button class="ghost sm" data-mv="${esc(t.id)}|${st==='doing'?'backlog':'doing'}">←</button>`:''}${st!=='done'?`<button class="ghost sm" data-mv="${esc(t.id)}|${st==='backlog'?'doing':'done'}">→</button>`:''}<button class="ghost sm" data-edit-t="${esc(t.id)}">editar</button><button class="sm" data-exec-t="${esc(t.id)}" title="copia o prompt para executar esta tarefa no chat">▶ executar</button><button class="danger sm" data-del-t="${esc(t.id)}">x</button></div></div>`).join(''):'<span class="muted">vazio</span>')+`</div>`;
   }).join('');
   $('sprint-cols').querySelectorAll('[data-mv]').forEach(b=>b.onclick=()=>moveTask(b.dataset.mv.split('|')[0],b.dataset.mv.split('|')[1]));
   $('sprint-cols').querySelectorAll('[data-edit-t]').forEach(b=>b.onclick=()=>editTask(b.dataset.editT));
   $('sprint-cols').querySelectorAll('[data-exec-t]').forEach(b=>b.onclick=()=>copyExecPrompt(b.dataset.execT));
   $('sprint-cols').querySelectorAll('[data-del-t]').forEach(b=>b.onclick=()=>delTask(b.dataset.delT));
-  bindLocks($('sprint-cols'));
 }
 async function moveTask(id,st){
   try{ applyChange('sprint','sprint-task',id,'move',{status:st},'user'); await saveTabFile('sprint'); renderAll(); }
@@ -533,19 +540,17 @@ let OPEN_PAGE=null;
 function applyPages(kind,tid,action,payload,actor){
   const d=CACHE[FILES.pages]; payload=payload||{};
   if(kind==='page'){
-    if(action==='create'){ if(d.pages.length>=200) throw new Error('limite de paginas'); const clean=validatePage(payload); const now=new Date().toISOString(); const pg={id:vId(payload.id||uid('p')),...clean,locked:false,lockedBy:null,lockedAt:null,elements:[],updatedBy:actor,updatedAt:now}; d.pages.push(pg); return pg; }
+    if(action==='create'){ if(d.pages.length>=200) throw new Error('limite de paginas'); const clean=validatePage(payload); const now=new Date().toISOString(); const pg={id:vId(payload.id||uid('p')),...clean,elements:[],updatedBy:actor,updatedAt:now}; d.pages.push(pg); spawnImpliedTasksUI(pg,actor,{tab:'pages',kind:'page'}); return pg; }
     const pg=d.pages.find(p=>p.id===tid); if(!pg) throw new Error('pagina nao encontrada');
-    if(actor==='agent'&&pg.locked) throw new Error('pagina bloqueada');
-    if(action==='update'){ const clean=validatePage(payload,true); for(const k of Object.keys(clean)) if(k in payload) pg[k]=clean[k]; pg.updatedBy=actor; pg.updatedAt=new Date().toISOString(); return pg; }
+    if(action==='update'){ const clean=validatePage(payload,true); for(const k of Object.keys(clean)) if(k in payload) pg[k]=clean[k]; pg.updatedBy=actor; pg.updatedAt=new Date().toISOString(); spawnImpliedTasksUI(pg,actor,{tab:'pages',kind:'page'}); return pg; }
     if(action==='delete'){ d.pages=d.pages.filter(p=>p.id!==tid); if(OPEN_PAGE===tid) OPEN_PAGE=null; return {deleted:tid}; }
     throw new Error('acao invalida');
   }
   if(kind==='page-element'){
     const pageId=action==='create'?(payload.pageId||payload.page_id):(payload.pageId||payload.page_id||pageOf(tid));
     const pg=d.pages.find(p=>p.id===pageId); if(!pg) throw new Error('pagina nao encontrada');
-    if(action==='create'){ if(actor==='agent'&&pg.locked) throw new Error('pagina bloqueada'); const els=pg.elements; if(els.length>=200) throw new Error('limite de elementos'); const clean=validateElement(payload); const now=new Date().toISOString(); const el={id:vId(payload.id||uid('el')),...clean,locked:false,lockedBy:null,lockedAt:null,snapshotHtml:'',comments:[],updatedBy:actor,updatedAt:now}; els.push(el); return el; }
+    if(action==='create'){ const els=pg.elements; if(els.length>=200) throw new Error('limite de elementos'); const clean=validateElement(payload); const now=new Date().toISOString(); const el={id:vId(payload.id||uid('el')),...clean,snapshotHtml:'',comments:[],updatedBy:actor,updatedAt:now}; els.push(el); return el; }
     const owner=pageOf(tid), el=findEl(tid);
-    if(actor==='agent'&&(el.locked||d.pages.find(p=>p.id===owner).locked)) throw new Error('elemento bloqueado');
     if(action==='update'){ const clean=validateElement(payload,true); for(const k of Object.keys(clean)) if(k in payload) el[k]=clean[k]; if('snapshotHtml' in payload&&actor==='user') el.snapshotHtml=vStr(payload.snapshotHtml,'snapshotHtml',20000,false); el.updatedBy=actor; el.updatedAt=new Date().toISOString(); return el; }
     if(action==='delete'){ const o=d.pages.find(p=>p.id===owner); o.elements=o.elements.filter(e=>e.id!==tid); return {deleted:tid}; }
     throw new Error('acao invalida');
@@ -567,11 +572,10 @@ function pageOf(eid){ for(const p of CACHE[FILES.pages].pages) for(const e of (p
 function findEl(eid){ vId(eid); for(const p of CACHE[FILES.pages].pages) for(const e of (p.elements||[])) if(e.id===eid) return e; throw new Error('elemento nao encontrado'); }
 function renderPages(){
   const d=CACHE[FILES.pages];
-  $('pages-list').innerHTML=d.pages.length?'<table><tr><th>Página</th><th>Rota</th><th>Elem.</th><th></th></tr>'+d.pages.map(p=>`<tr><td><strong>${esc(p.name)}</strong> ${lockTag(p)}<br><span class="muted">${esc((p.desc||'').slice(0,120))}</span></td><td class="mono">${esc(p.route||'—')}</td><td>${(p.elements||[]).length}</td><td style="white-space:nowrap"><button class="sm" data-open-p="${esc(p.id)}">abrir</button> <button class="ghost sm" data-edit-p="${esc(p.id)}">editar</button> ${lockBtn('pages','page',p.id,p.locked)} <button class="danger sm" data-del-p="${esc(p.id)}">x</button></td></tr>`).join('')+'</table>':'<span class="muted">Nenhuma página. Cadastre as páginas do sistema.</span>';
+  $('pages-list').innerHTML=d.pages.length?'<table><tr><th>Página</th><th>Rota</th><th>Elem.</th><th></th></tr>'+d.pages.map(p=>`<tr><td><strong>${esc(p.name)}</strong> <br><span class="muted">${esc((p.desc||'').slice(0,120))}</span></td><td class="mono">${esc(p.route||'—')}</td><td>${(p.elements||[]).length}</td><td style="white-space:nowrap"><button class="sm" data-open-p="${esc(p.id)}">abrir</button> <button class="ghost sm" data-edit-p="${esc(p.id)}">editar</button>  <button class="danger sm" data-del-p="${esc(p.id)}">x</button></td></tr>`).join('')+'</table>':'<span class="muted">Nenhuma página. Cadastre as páginas do sistema.</span>';
   $('pages-list').querySelectorAll('[data-open-p]').forEach(b=>b.onclick=()=>{OPEN_PAGE=b.dataset.openP;renderPageDetail();});
   $('pages-list').querySelectorAll('[data-edit-p]').forEach(b=>b.onclick=()=>editPage(b.dataset.editP));
   $('pages-list').querySelectorAll('[data-del-p]').forEach(b=>b.onclick=()=>delPage(b.dataset.delP));
-  bindLocks($('pages-list'));
   renderPageDetail();
 }
 function editPage(id){
@@ -595,13 +599,13 @@ function renderPageDetail(){
   const host=$('page-detail');
   const pg=CACHE[FILES.pages].pages.find(p=>p.id===OPEN_PAGE);
   if(!pg){ host.innerHTML=''; return; }
-  host.innerHTML=`<div class="card"><h2>${esc(pg.name)} ${lockTag(pg)} <span class="hint">elementos, comentários e travas de design</span></h2>
+  host.innerHTML=`<div class="card"><h2>${esc(pg.name)}  <span class="hint">elementos, comentários e travas de design</span></h2>
   <h3>Prévia como o usuário vê <span class="hint">clique num bloco para comentar como revisor</span></h3>
   <div id="pv-list">${(pg.elements||[]).map(e=>`<div class="pv-card" data-pv="${esc(e.id)}">${pvRender(e)}</div>`).join('')||'<span class="muted">Sem elementos ainda.</span>'}</div>
-  ${(pg.elements||[]).map(e=>`<div class="task"><div class="t">[${esc(e.type)}] ${esc(e.label)} ${lockTag(e)}</div><div class="muted" style="white-space:pre-wrap">${esc((e.content||'').slice(0,300))}</div>
+  ${(pg.elements||[]).map(e=>`<div class="task"><div class="t">[${esc(e.type)}] ${esc(e.label)} </div><div class="muted" style="white-space:pre-wrap">${esc((e.content||'').slice(0,300))}</div>
   ${e.snapshotHtml?`<details><summary>pré-visualização do editor visual</summary><iframe class="preview" sandbox="" srcdoc="${esc(e.snapshotHtml)}"></iframe></details>`:''}
   <details id="c-det-${esc(e.id)}"><summary>Comentários (${(e.comments||[]).length})</summary><div>${(e.comments||[]).map(c=>`<div class="comment"><div class="who">${esc(c.author)} · ${esc(fmtDate(c.createdAt))}</div><div class="txt">${esc(c.text)}</div></div>`).join('')||'<span class="muted">sem comentários</span>'}</div><div class="row" style="margin-top:.4rem"><input type="text" data-c-author="${esc(e.id)}" class="grow" placeholder="seu nome" maxlength="120" value="você"><input type="text" data-c-text="${esc(e.id)}" class="grow" placeholder="Comentar neste elemento..." maxlength="2000"><button class="sm" data-c-send="${esc(e.id)}">Comentar</button></div></details>
-  <div class="row" style="margin-top:.35rem"><button class="ghost sm" data-edit-el2="${esc(e.id)}">editar</button><button class="ghost sm" data-visual="${esc(e.id)}">editor visual</button>${lockBtn('pages','page-element',e.id,e.locked)}<button class="danger sm" data-del-el2="${esc(e.id)}">x</button></div></div>`).join('')||'<span class="muted">Sem elementos ainda.</span>'}
+  <div class="row" style="margin-top:.35rem"><button class="ghost sm" data-edit-el2="${esc(e.id)}">editar</button><button class="ghost sm" data-visual="${esc(e.id)}">editor visual</button><button class="danger sm" data-del-el2="${esc(e.id)}">x</button></div></div>`).join('')||'<span class="muted">Sem elementos ainda.</span>'}
   <h3>Novo elemento</h3><div class="row"><select id="e-type">${ENUMS.ptype.map(t=>`<option>${t}</option>`).join('')}</select><input type="text" id="e-label" class="grow" placeholder="Rótulo (até 200)" maxlength="200"><input type="text" id="e-content" class="grow" placeholder="Conteúdo/descrição (até 20000)" maxlength="20000"><button id="e-add">Adicionar</button></div></div>`;
   host.querySelectorAll('[data-pv]').forEach(c=>c.onclick=()=>{
     host.querySelectorAll('.pv-card').forEach(x=>x.classList.remove('sel'));
@@ -613,7 +617,6 @@ function renderPageDetail(){
   host.querySelectorAll('[data-del-el2]').forEach(b=>b.onclick=()=>delPageElement(b.dataset.delEl2));
   host.querySelectorAll('[data-c-send]').forEach(b=>b.onclick=()=>sendComment(b.dataset.cSend));
   host.querySelectorAll('[data-visual]').forEach(b=>b.onclick=()=>openVisualEditor(b.dataset.visual));
-  bindLocks(host);
   $('e-add').onclick=addPageElement;
 }
 async function addPageElement(){
@@ -646,7 +649,6 @@ function loadGrapes(){
 }
 async function openVisualEditor(eid){
   const el=findEl(eid);
-  if(el.locked){ msg('Elemento travado: destrave para editar o design.',false); return; }
   openModal(`<h2 style="color:#93c5fd;margin-bottom:.5rem">Editor visual — ${esc(el.label)}</h2><p class="hint">Editor open-source (GrapesJS, MIT), carregado somente agora, sob seu clique. O HTML final vira uma pré-visualização travável do elemento.</p><div id="grapes-host"></div><div class="row" style="margin-top:.6rem"><button id="g-save">Salvar design no elemento</button><button class="ghost" onclick="closeModal()">Fechar</button></div><div class="hint" id="g-msg"></div>`);
   try{
     await loadGrapes();
@@ -660,25 +662,22 @@ let OPEN_TABLE=null;
 function applyTables(kind,tid,action,payload,actor){
   const d=CACHE[FILES.tables]; payload=payload||{};
   if(kind==='table'){
-    if(action==='create'){ if(d.tables.length>=200) throw new Error('limite de tabelas'); const name=vTableName(payload.name,d.tables.map(t=>t.name)); const now=new Date().toISOString(); const tb={id:vId(payload.id||uid('tb')),name,desc:vStr(payload.desc,'desc',5000,false),locked:false,lockedBy:null,lockedAt:null,columns:[],updatedBy:actor,updatedAt:now}; d.tables.push(tb); return tb; }
+    if(action==='create'){ if(d.tables.length>=200) throw new Error('limite de tabelas'); const name=vTableName(payload.name,d.tables.map(t=>t.name)); const now=new Date().toISOString(); const tb={id:vId(payload.id||uid('tb')),name,desc:vStr(payload.desc,'desc',5000,false),tasks:Array.isArray(payload.tasks)?payload.tasks.map(vTaskBrief):[],columns:[],updatedBy:actor,updatedAt:now}; d.tables.push(tb); spawnImpliedTasksUI(tb,actor,{tab:'tables',kind:'table'}); return tb; }
     const tb=d.tables.find(t=>t.id===tid); if(!tb) throw new Error('tabela nao encontrada');
-    if(actor==='agent'&&tb.locked) throw new Error('tabela bloqueada');
-    if(action==='update'){ if('desc' in payload) tb.desc=vStr(payload.desc,'desc',5000,false); tb.updatedBy=actor; tb.updatedAt=new Date().toISOString(); return tb; }
+    if(action==='update'){ if('desc' in payload) tb.desc=vStr(payload.desc,'desc',5000,false); if('tasks' in payload) tb.tasks=Array.isArray(payload.tasks)?payload.tasks.map(vTaskBrief):[]; tb.updatedBy=actor; tb.updatedAt=new Date().toISOString(); spawnImpliedTasksUI(tb,actor,{tab:'tables',kind:'table'}); return tb; }
     if(action==='delete'){ const refs=referencedBy(tb.name); if(refs.length) throw new Error('tabela referenciada por: '+refs.slice(0,5).join(', ')); d.tables=d.tables.filter(t=>t.id!==tid); if(OPEN_TABLE===tid) OPEN_TABLE=null; return {deleted:tid}; }
     throw new Error('acao invalida');
   }
   if(kind==='table-column'){
-    if(action==='create'){ const tb=d.tables.find(t=>t.id===(payload.tableId||payload.table_id)); if(!tb) throw new Error('tabela nao encontrada'); if(actor==='agent'&&tb.locked) throw new Error('tabela bloqueada'); if(tb.columns.length>=100) throw new Error('limite de colunas'); const col=validateColumn(payload,tb.columns.map(c=>c.name),d.tables); const now=new Date().toISOString(); const nc={id:vId(payload.id||uid('col')),...col,locked:false,lockedBy:null,lockedAt:null,updatedBy:actor,updatedAt:now}; tb.columns.push(nc); return nc; }
+    if(action==='create'){ const tb=d.tables.find(t=>t.id===(payload.tableId||payload.table_id)); if(!tb) throw new Error('tabela nao encontrada'); if(tb.columns.length>=100) throw new Error('limite de colunas'); const col=validateColumn(payload,tb.columns.map(c=>c.name),d.tables); const now=new Date().toISOString(); const nc={id:vId(payload.id||uid('col')),...col,updatedBy:actor,updatedAt:now}; tb.columns.push(nc); return nc; }
     const found=findColumn(tid); const tb=found.tb, col=found.col;
-    if(actor==='agent'&&(col.locked||tb.locked)) throw new Error('coluna bloqueada');
     if(action==='update'){ if('name' in payload&&payload.name!==col.name){ const refs=referencedBy(tb.name,col.name); if(refs.length) throw new Error('coluna referenciada por: '+refs.slice(0,5).join(', ')); } const clean=validateColumn({...col,...payload},true,tb.columns.filter(c=>c.id!==tid).map(c=>c.name),d.tables); for(const k of Object.keys(clean)) if(k in payload) col[k]=clean[k]; col.updatedBy=actor; col.updatedAt=new Date().toISOString(); return col; }
     if(action==='delete'){ const refs=referencedBy(tb.name,col.name); if(refs.length) throw new Error('coluna referenciada por: '+refs.slice(0,5).join(', ')); tb.columns=tb.columns.filter(c=>c.id!==tid); return {deleted:tid}; }
     throw new Error('acao invalida');
   }
   if(kind==='relation'){
-    if(action==='create'){ if(d.relations.length>=500) throw new Error('limite de relacoes'); const rel=validateRelation(payload,d.tables); const now=new Date().toISOString(); const nr={id:vId(payload.id||uid('rel')),...rel,locked:false,lockedBy:null,lockedAt:null,updatedBy:actor,updatedAt:now}; d.relations.push(nr); return nr; }
+    if(action==='create'){ if(d.relations.length>=500) throw new Error('limite de relacoes'); const rel=validateRelation(payload,d.tables); const now=new Date().toISOString(); const nr={id:vId(payload.id||uid('rel')),...rel,updatedBy:actor,updatedAt:now}; d.relations.push(nr); return nr; }
     const rel=d.relations.find(r=>r.id===tid); if(!rel) throw new Error('relacao nao encontrada');
-    if(actor==='agent'&&rel.locked) throw new Error('relacao bloqueada');
     if(action==='update'){ if('cardinality' in payload) rel.cardinality=vEnum(payload.cardinality,'cardinality',ENUMS.card); if('desc' in payload) rel.desc=vStr(payload.desc,'desc',5000,false); rel.updatedBy=actor; rel.updatedAt=new Date().toISOString(); return rel; }
     if(action==='delete'){ d.relations=d.relations.filter(r=>r.id!==tid); return {deleted:tid}; }
     throw new Error('acao invalida');
@@ -723,7 +722,7 @@ function renderDiagram(d){
   if(!d.tables.length){ host.innerHTML=''; return; }
   host.innerHTML=`<div class="card"><h2>Diagrama <span class="hint">clique numa coluna de origem e depois na coluna destino para ligar</span></h2>
   <div id="linkbar"><span id="linkbar-txt">Nenhuma origem selecionada.</span><button class="ghost sm" id="linkbar-cancel" style="display:none">cancelar</button></div>
-  <div id="diagram"><svg id="wires"></svg>${d.tables.map(t=>`<div class="dtable" data-dt="${esc(t.id)}"><h4 class="mono">${esc(t.name)} ${lockTag(t)}</h4>${(t.columns||[]).map(c=>`<div class="dcol" data-link="${esc(t.id)}|${esc(c.name)}" title="${esc(c.type)}${c.pk?' · PK':''}${c.fk?' · FK→'+esc(c.fk.table+'.'+c.fk.column):''}">${c.pk?'🔑 ':''}${esc(c.name)} <span class="muted">${esc(c.type)}</span></div>`).join('')||'<div class="muted" style="padding:.3rem .6rem">sem colunas</div>'}</div>`).join('')}</div></div>`;
+  <div id="diagram"><svg id="wires"></svg>${d.tables.map(t=>`<div class="dtable" data-dt="${esc(t.id)}"><h4 class="mono">${esc(t.name)} </h4>${(t.columns||[]).map(c=>`<div class="dcol" data-link="${esc(t.id)}|${esc(c.name)}" title="${esc(c.type)}${c.pk?' · PK':''}${c.fk?' · FK→'+esc(c.fk.table+'.'+c.fk.column):''}">${c.pk?'🔑 ':''}${esc(c.name)} <span class="muted">${esc(c.type)}</span></div>`).join('')||'<div class="muted" style="padding:.3rem .6rem">sem colunas</div>'}</div>`).join('')}</div></div>`;
   $('linkbar-cancel').onclick=()=>{ LINK_SRC=null; refreshLinkbar(); };
   host.querySelectorAll('[data-link]').forEach(el=>el.onclick=()=>clickLink(el.dataset.link));
   refreshLinkbar();
@@ -772,13 +771,11 @@ function tabs_find_id(tname){ const t=(CACHE[FILES.tables].tables||[]).find(x=>x
 function renderTables(){
   const d=CACHE[FILES.tables];
   try{ renderDiagram(d); }catch(e){ console.warn('diagrama:',e.message); }
-  $('tables-list').innerHTML=d.tables.length?'<table><tr><th>Tabela</th><th>Colunas</th><th></th></tr>'+d.tables.map(t=>`<tr><td><strong class="mono">${esc(t.name)}</strong> ${lockTag(t)}<br><span class="muted">${esc((t.desc||'').slice(0,120))}</span></td><td>${(t.columns||[]).length}</td><td style="white-space:nowrap"><button class="sm" data-open-t="${esc(t.id)}">abrir</button>${lockBtn('tables','table',t.id,t.locked)}<button class="danger sm" data-del-t="${esc(t.id)}">x</button></td></tr>`).join('')+'</table>':'<span class="muted">Nenhuma tabela. Modele as entidades do sistema.</span>';
+  $('tables-list').innerHTML=d.tables.length?'<table><tr><th>Tabela</th><th>Colunas</th><th></th></tr>'+d.tables.map(t=>`<tr><td><strong class="mono">${esc(t.name)}</strong> <br><span class="muted">${esc((t.desc||'').slice(0,120))}</span></td><td>${(t.columns||[]).length}</td><td style="white-space:nowrap"><button class="sm" data-open-t="${esc(t.id)}">abrir</button><button class="danger sm" data-del-t="${esc(t.id)}">x</button></td></tr>`).join('')+'</table>':'<span class="muted">Nenhuma tabela. Modele as entidades do sistema.</span>';
   $('tables-list').querySelectorAll('[data-open-t]').forEach(b=>b.onclick=()=>{OPEN_TABLE=b.dataset.openT;renderTableDetail();});
   $('tables-list').querySelectorAll('[data-del-t]').forEach(b=>b.onclick=()=>delTable(b.dataset.delT));
-  bindLocks($('tables-list'));
-  $('relations-list').innerHTML=d.relations.length?'<table><tr><th>De</th><th></th><th>Para</th><th></th></tr>'+d.relations.map(r=>`<tr><td class="mono">${esc(r.fromTable)}.${esc(r.fromColumn)}</td><td><span class="tag dim">${esc(r.cardinality)}</span></td><td class="mono">${esc(r.toTable)}.${esc(r.toColumn)}</td><td style="white-space:nowrap">${lockTag(r)}${lockBtn('tables','relation',r.id,r.locked)}<button class="danger sm" data-del-r="${esc(r.id)}">x</button></td></tr>`).join('')+'</table>':'<span class="muted">Sem relações.</span>';
+  $('relations-list').innerHTML=d.relations.length?'<table><tr><th>De</th><th></th><th>Para</th><th></th></tr>'+d.relations.map(r=>`<tr><td class="mono">${esc(r.fromTable)}.${esc(r.fromColumn)}</td><td><span class="tag dim">${esc(r.cardinality)}</span></td><td class="mono">${esc(r.toTable)}.${esc(r.toColumn)}</td><td style="white-space:nowrap"><button class="danger sm" data-del-r="${esc(r.id)}">x</button></td></tr>`).join('')+'</table>':'<span class="muted">Sem relações.</span>';
   $('relations-list').querySelectorAll('[data-del-r]').forEach(b=>b.onclick=()=>delRelation(b.dataset.delR));
-  bindLocks($('relations-list'));
   renderTableDetail();
 }
 async function delTable(id){ if(!confirm('Excluir tabela? (bloqueia se houver referências)')) return; try{ applyChange('tables','table',id,'delete',{},'user'); await saveTabFile('tables'); renderAll(); }catch(e){ msg('Erro: '+e.message,false); } }
@@ -787,12 +784,11 @@ function renderTableDetail(){
   const host=$('table-detail');
   const tb=CACHE[FILES.tables].tables.find(t=>t.id===OPEN_TABLE);
   if(!tb){ host.innerHTML=''; return; }
-  host.innerHTML=`<div class="card"><h2 class="mono">${esc(tb.name)} ${lockTag(tb)}</h2>
-  <table><tr><th>Coluna</th><th>Tipo</th><th>Atributos</th><th>FK</th><th></th></tr>${(tb.columns||[]).map(c=>`<tr><td class="mono"><strong>${esc(c.name)}</strong> ${lockTag(c)}</td><td>${esc(c.type)}</td><td>${c.pk?'<span class="tag dim">PK</span>':''}${c.nullable?'':'<span class="tag dim">NOT NULL</span>'}</td><td class="mono">${c.fk?esc(c.fk.table)+'.'+esc(c.fk.column):'—'}</td><td style="white-space:nowrap"><button class="ghost sm" data-edit-c="${esc(c.id)}">editar</button>${lockBtn('tables','table-column',c.id,c.locked)}<button class="danger sm" data-del-c="${esc(c.id)}">x</button></td></tr>`).join('')||'<tr><td colspan="5" class="muted">sem colunas</td></tr>'}</table>
+  host.innerHTML=`<div class="card"><h2 class="mono">${esc(tb.name)} </h2>
+  <table><tr><th>Coluna</th><th>Tipo</th><th>Atributos</th><th>FK</th><th></th></tr>${(tb.columns||[]).map(c=>`<tr><td class="mono"><strong>${esc(c.name)}</strong> </td><td>${esc(c.type)}</td><td>${c.pk?'<span class="tag dim">PK</span>':''}${c.nullable?'':'<span class="tag dim">NOT NULL</span>'}</td><td class="mono">${c.fk?esc(c.fk.table)+'.'+esc(c.fk.column):'—'}</td><td style="white-space:nowrap"><button class="ghost sm" data-edit-c="${esc(c.id)}">editar</button><button class="danger sm" data-del-c="${esc(c.id)}">x</button></td></tr>`).join('')||'<tr><td colspan="5" class="muted">sem colunas</td></tr>'}</table>
   <h3>Nova coluna</h3><div class="row"><input type="text" id="c-name" placeholder="nome" maxlength="120"><select id="c-type">${ENUMS.ctype.map(t=>`<option>${t}</option>`).join('')}</select><label class="muted"><input type="checkbox" id="c-pk"> PK</label><label class="muted"><input type="checkbox" id="c-nn"> NOT NULL</label><input type="text" id="c-fk" class="grow" placeholder="FK tabela.coluna (opcional)" maxlength="250"><button id="c-add">Adicionar</button></div></div>`;
   host.querySelectorAll('[data-edit-c]').forEach(b=>b.onclick=()=>editColumn(b.dataset.editC));
   host.querySelectorAll('[data-del-c]').forEach(b=>b.onclick=()=>delColumn(b.dataset.delC));
-  bindLocks(host);
   $('c-add').onclick=addColumn;
 }
 async function addColumn(){
@@ -808,21 +804,7 @@ function editColumn(cid){
 }
 async function delColumn(cid){ if(!confirm('Excluir coluna? (bloqueia se houver referências)')) return; try{ applyChange('tables','table-column',cid,'delete',{},'user'); await saveTabFile('tables'); renderAll(); }catch(e){ msg('Erro: '+e.message,false); } }
 
-/* ================= locks / projetos / boot ================= */
-function bindLocks(scope){ (scope||document).querySelectorAll('[data-lock]').forEach(b=>{ b.onclick=()=>toggleLock(b.dataset.lock); }); }
-async function toggleLock(spec){
-  const [tab,kind,id,to]=spec.split('|');
-  try{
-    const file={concept:FILES.concept,sprint:FILES.sprint,pages:FILES.pages,tables:FILES.tables}[tab];
-    const data=CACHE[file];
-    const tgt=findTarget(tab,kind,id);
-    if(!tgt) throw new Error('alvo nao encontrado');
-    const locked=to==='1';
-    tgt.locked=locked; tgt.lockedBy=locked?'user':null; tgt.lockedAt=locked?new Date().toISOString():null; tgt.updatedBy='user'; tgt.updatedAt=new Date().toISOString();
-    await saveFile(file,data); renderAll();
-    msg(locked?'Travado: o sistema não pode mais alterar.':'Destravado.',true);
-  }catch(e){ msg('Erro: '+e.message,false); }
-}
+/* ================= projetos / boot ================= */
 async function loadProjects(){
   const sel=$('project');
   try{
@@ -858,9 +840,12 @@ $('btn-reload').onclick=reloadAll;
 $('f-kind').onchange=renderConcept; $('f-search').oninput=renderConcept;
 $('btn-vision').onclick=async()=>{ try{ applyChange('concept','concept-vision',null,'update',{objective:$('v-objective').value,audience:$('v-audience').value,scope:$('v-scope').value,nonGoals:$('v-nongoals').value},'user'); await saveTabFile('concept'); renderAll(); msg('Visão salva.',true);}catch(e){msg('Erro: '+e.message,false);} };
 $('btn-add-element').onclick=async()=>{ try{ applyChange('concept','concept-element',null,'create',{kind:$('n-kind').value,title:$('n-title').value,description:$('n-desc').value,details:$('n-details').value,tasks:parseTaskLines($('n-tasks').value)},'user'); await saveTabFile('concept'); await saveSprintIfDirty(); $('n-title').value='';$('n-desc').value='';$('n-details').value='';$('n-tasks').value=''; renderAll(); msg('Elemento adicionado.',true);}catch(e){msg('Erro: '+e.message,false);} };
-$('btn-add-task').onclick=async()=>{ try{ applyChange('sprint','sprint-task',null,'create',{title:$('t-title').value,desc:$('t-desc').value,priority:$('t-priority').value},'user'); await saveTabFile('sprint'); $('t-title').value='';$('t-desc').value=''; renderAll(); msg('Tarefa adicionada ao backlog.',true);}catch(e){msg('Erro: '+e.message,false);} };
-$('btn-add-page').onclick=async()=>{ try{ const pg=applyChange('pages','page',null,'create',{name:$('p-name').value,route:$('p-route').value,desc:$('p-desc').value},'user'); await saveTabFile('pages'); $('p-name').value='';$('p-route').value='';$('p-desc').value=''; OPEN_PAGE=pg.id; renderAll(); msg('Página criada.',true);}catch(e){msg('Erro: '+e.message,false);} };
-$('btn-add-table').onclick=async()=>{ try{ const tb=applyChange('tables','table',null,'create',{name:$('tb-name').value,desc:$('tb-desc').value},'user'); await saveTabFile('tables'); $('tb-name').value='';$('tb-desc').value=''; OPEN_TABLE=tb.id; renderAll(); msg('Tabela criada.',true);}catch(e){msg('Erro: '+e.message,false);} };
+/* Tarefas avulsas desativadas: nascem de aprovacoes (conceito/pagina/tabela). */
+if($('s-search')) $('s-search').oninput=renderSprint;
+if($('s-origin')) $('s-origin').onchange=renderSprint;
+if($('s-priority')) $('s-priority').onchange=renderSprint;
+$('btn-add-page').onclick=async()=>{ try{ const pg=applyChange('pages','page',null,'create',{name:$('p-name').value,route:$('p-route').value,desc:$('p-desc').value,tasks:parseTaskLines($('p-tasks').value)},'user'); await saveTabFile('pages'); await saveSprintIfDirty(); $('p-name').value='';$('p-route').value='';$('p-desc').value='';$('p-tasks').value=''; OPEN_PAGE=pg.id; renderAll(); msg('Página criada.',true);}catch(e){msg('Erro: '+e.message,false);} };
+$('btn-add-table').onclick=async()=>{ try{ const tb=applyChange('tables','table',null,'create',{name:$('tb-name').value,desc:$('tb-desc').value,tasks:parseTaskLines($('tb-tasks').value)},'user'); await saveTabFile('tables'); await saveSprintIfDirty(); $('tb-name').value='';$('tb-desc').value='';$('tb-tasks').value=''; OPEN_TABLE=tb.id; renderAll(); msg('Tabela criada.',true);}catch(e){msg('Erro: '+e.message,false);} };
 $('btn-add-relation').onclick=async()=>{ const parse=s=>{ const m=String(s||'').trim().split('.'); return m.length===2?{table:m[0].trim(),column:m[1].trim()}:null; };
   try{ const f=parse($('r-from').value), t=parse($('r-to').value); if(!f||!t) throw new Error('use o formato tabela.coluna'); applyChange('tables','relation',null,'create',{fromTable:f.table,fromColumn:f.column,toTable:t.table,toColumn:t.column,cardinality:$('r-card').value,desc:$('r-desc').value},'user'); await saveTabFile('tables'); $('r-from').value='';$('r-to').value='';$('r-desc').value=''; renderAll(); msg('Relação criada.',true);}catch(e){msg('Erro: '+e.message,false);} };
 boot();

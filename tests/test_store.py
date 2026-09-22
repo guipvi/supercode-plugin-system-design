@@ -35,7 +35,7 @@ def test_data_file_allowlist(root):
 def test_concept_crud_user(root):
     el = store.user_action(root, PROJ, "concept", "concept-element", None, "create",
                            {"kind": "function", "title": "Checkout", "description": "d", "details": "x"})
-    assert el["id"] and el["locked"] is False
+    assert el["id"]
     got = store.load_data(root, PROJ, store.CONCEPT_FILE)
     assert len(got["elements"]) == 1
     upd = store.user_action(root, PROJ, "concept", "concept-element", el["id"], "update",
@@ -74,7 +74,7 @@ def test_vision_via_proposal_and_approve(root):
 
 
 def test_agent_must_propose_concept_even_unlocked(root):
-    # agentes não têm função de escrita direta: só propose() — e propose valida locks
+    # agentes não têm função de escrita direta: só propose()
     el = store.user_action(root, PROJ, "concept", "concept-element", None, "create",
                            {"kind": "page", "title": "Home"})
     prop = store.propose(root, PROJ, "concept", "concept-element", el["id"], "update",
@@ -87,23 +87,15 @@ def test_agent_must_propose_concept_even_unlocked(root):
     assert store.load_data(root, PROJ, store.CONCEPT_FILE)["elements"][0]["title"] == "Home v2"
 
 
-def test_locked_blocks_agent_propose(root):
+def test_no_locks_propose_always_allowed(root):
+    # sem travas: propose vale para qualquer alvo, o controle é o inbox
     el = store.user_action(root, PROJ, "concept", "concept-element", None, "create",
                            {"kind": "interface", "title": "Header"})
-    store.set_lock(root, PROJ, "concept", "concept-element", el["id"], True)
-    with pytest.raises(ValueError, match="bloqueado"):
-        store.propose(root, PROJ, "concept", "concept-element", el["id"], "update",
-                      {"title": "X"}, reason="tentativa")
-    # usuário continua podendo editar
+    prop = store.propose(root, PROJ, "concept", "concept-element", el["id"], "update",
+                         {"title": "X"}, reason="tentativa")
+    assert prop["status"] == "pending"
     upd = store.user_action(root, PROJ, "concept", "concept-element", el["id"], "update", {"title": "Y"})
     assert upd["title"] == "Y"
-
-
-def test_lock_only_user(root):
-    el = store.user_action(root, PROJ, "concept", "concept-element", None, "create",
-                           {"kind": "interface", "title": "T"})
-    with pytest.raises(ValueError):
-        store.set_lock(root, PROJ, "concept", "concept-element", el["id"], True, by="agent")
 
 
 def test_decide_only_user(root):
@@ -114,17 +106,13 @@ def test_decide_only_user(root):
         store.decide(root, PROJ, prop["id"], True, by="agent")
 
 
-def test_lock_after_propose_blocks_approve(root):
+def test_approve_applies_without_locks(root):
     el = store.user_action(root, PROJ, "concept", "concept-element", None, "create",
                            {"kind": "interface", "title": "T"})
     prop = store.propose(root, PROJ, "concept", "concept-element", el["id"], "update", {"title": "Z"})
-    store.set_lock(root, PROJ, "concept", "concept-element", el["id"], True)
-    with pytest.raises(ValueError, match="travado"):
-        store.decide(root, PROJ, prop["id"], True)
-    # destravou: aprova
-    store.set_lock(root, PROJ, "concept", "concept-element", el["id"], False)
     out = store.decide(root, PROJ, prop["id"], True)
     assert out["status"] == "approved"
+    assert store.load_data(root, PROJ, store.CONCEPT_FILE)["elements"][0]["title"] == "Z"
 
 
 def test_reject_proposal(root):
@@ -144,12 +132,12 @@ def test_sprint_flow(root):
     assert store.load_data(root, PROJ, store.SPRINT_FILE)["tasks"][0]["status"] == "doing"
     with pytest.raises(ValueError):
         store.user_action(root, PROJ, "sprint", "sprint-task", t["id"], "move", {"status": "qa"})
-    store.set_lock(root, PROJ, "sprint", "sprint-task", t["id"], True)
-    with pytest.raises(ValueError, match="bloqueada"):
-        store.propose(root, PROJ, "sprint", "sprint-task", t["id"], "move", {"status": "done"})
+    # sem travas: progresso via proposta funciona (doing/done)
+    prop = store.propose(root, PROJ, "sprint", "sprint-task", t["id"], "move", {"status": "done"})
+    assert prop["status"] == "pending"
 
 
-def test_pages_comments_and_lock(root):
+def test_pages_comments(root):
     pg = store.user_action(root, PROJ, "pages", "page", None, "create",
                            {"name": "Checkout", "route": "/checkout"})
     el = store.user_action(root, PROJ, "pages", "page-element", None, "create",
@@ -157,17 +145,15 @@ def test_pages_comments_and_lock(root):
     c = store.user_action(root, PROJ, "pages", "page-comment", el["id"], "comment",
                           {"elementId": el["id"], "author": "você", "text": "aumentar contraste"})
     assert c["text"] == "aumentar contraste"
-    store.set_lock(root, PROJ, "pages", "page-element", el["id"], True)
-    with pytest.raises(ValueError, match="bloqueado"):
-        store.propose(root, PROJ, "pages", "page-element", el["id"], "update",
-                      {"pageId": pg["id"], "label": "X"})
-    # comentário em elemento travado continua permitido (comentário não é edição de design)
+    prop = store.propose(root, PROJ, "pages", "page-element", el["id"], "update",
+                         {"pageId": pg["id"], "label": "X"})
+    assert prop["status"] == "pending"
     c2 = store.user_action(root, PROJ, "pages", "page-comment", el["id"], "comment",
                            {"elementId": el["id"], "text": "ok"})
     assert c2["id"]
 
 
-def test_tables_fk_and_locks(root):
+def test_tables_fk(root):
     users = store.user_action(root, PROJ, "tables", "table", None, "create", {"name": "users"})
     store.user_action(root, PROJ, "tables", "table-column", None, "create",
                       {"tableId": users["id"], "name": "id", "type": "uuid", "pk": True})
@@ -187,9 +173,9 @@ def test_tables_fk_and_locks(root):
     # excluir tabela referenciada deve falhar
     with pytest.raises(ValueError, match="referenciada"):
         store.user_action(root, PROJ, "tables", "table", users["id"], "delete", {})
-    store.set_lock(root, PROJ, "tables", "relation", rel["id"], True)
-    with pytest.raises(ValueError, match="bloqueada"):
-        store.propose(root, PROJ, "tables", "relation", rel["id"], "delete", {})
+    # sem travas: propor delete de relacao funciona
+    prop = store.propose(root, PROJ, "tables", "relation", rel["id"], "delete", {})
+    assert prop["status"] == "pending"
 
 
 def test_duplicate_names_rejected(root):
@@ -272,16 +258,39 @@ def test_approve_concept_dedupes_tasks(root):
     assert len(tasks) == 2
 
 
-def test_propose_rejects_generic_task_page_vision(root):
-    with pytest.raises(ValueError, match="generica"):
-        store.propose(root, PROJ, "sprint", "sprint-task", None, "create", {"title": "Fazer X"})
+def test_standalone_tasks_rejected_pages_need_tasks(root):
+    # sprint-task avulsa: banida (tarefas nascem de aprovacoes)
+    with pytest.raises(ValueError, match="aceitas a parte"):
+        store.propose(root, PROJ, "sprint", "sprint-task", None, "create",
+                      {"title": "Fazer X", "desc": "Detalhar o fluxo de checkout ponta a ponta"})
+    # page sem tasks: generica
     with pytest.raises(ValueError, match="generica"):
         store.propose(root, PROJ, "pages", "page", None, "create", {"name": "Home", "route": "/"})
     with pytest.raises(ValueError, match="generica"):
         store.propose(root, PROJ, "concept", "concept-vision", None, "update", {})
-    ok = store.propose(root, PROJ, "sprint", "sprint-task", None, "create",
-                       {"title": "Fazer X", "desc": "Detalhar o fluxo de checkout ponta a ponta"})
+    # page com tasks: pacote valido
+    ok = store.propose(root, PROJ, "pages", "page", None, "create",
+                       {"name": "Home", "route": "/",
+                        "desc": "Pagina inicial publica com proposta de valor",
+                        "tasks": [{"title": "Montar hero"}]})
     assert ok["status"] == "pending"
+    # table sem tasks: generica
+    with pytest.raises(ValueError, match="generica"):
+        store.propose(root, PROJ, "tables", "table", None, "create", {"name": "users"})
+    out = store.decide(root, PROJ, ok["id"], True)
+    assert [t["title"] for t in out["spawnedTasks"]] == ["Montar hero"]
+    assert store.load_data(root, PROJ, store.SPRINT_FILE)["tasks"][0]["origin"]["tab"] == "pages"
+
+
+def test_approve_table_spawns_with_origin(root):
+    prop = store.propose(root, PROJ, "tables", "table", None, "create",
+                         {"name": "orders", "desc": "Pedidos do marketplace em geral",
+                          "tasks": [{"title": "Criar migration orders", "status": "done", "desc": "migration 0025"}]})
+    out = store.decide(root, PROJ, prop["id"], True)
+    assert len(out["spawnedTasks"]) == 1
+    t = store.load_data(root, PROJ, store.SPRINT_FILE)["tasks"][0]
+    assert (t["title"], t["status"]) == ("Criar migration orders", "done")
+    assert t["origin"] == {"tab": "tables", "kind": "table", "id": t["origin"]["id"], "title": "orders"}
 
 
 def test_user_direct_create_stays_free(root):

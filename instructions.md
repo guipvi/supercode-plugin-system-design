@@ -9,9 +9,10 @@ plugin (projeto conceitual, sprint, páginas, tabelas, propostas).
   (sem `Edit`/`Write`/`Bash` nesses arquivos).
 - Toda mudança vira PROPOSTA via `system_design_propose` (status `pending`).
 - O usuário aprova ou rejeita cada proposta pela UI do plugin.
-- A aba **projeto conceitual SEMPRE exige proposta+aprovação**, mesmo destravada.
-- Alvos com `locked=true` REJEITAM propostas (erro). Não tente contornar:
-  avise o usuário e aguarde ele destravar.
+- A aba **projeto conceitual SEMPRE exige proposta+aprovação**.
+- Não existem travas: nada fica bloqueado. O usuário pode reescrever
+  qualquer item e movê-lo de volta (ex.: tarefa para backlog) a qualquer
+  momento — reescrever é o controle, não travar.
 - Apenas o usuário decide propostas (não existe ferramenta de aprovar).
 
 ## Fluxo
@@ -26,7 +27,9 @@ plugin (projeto conceitual, sprint, páginas, tabelas, propostas).
 
 - `concept-element`: create|update|delete — elemento de interface/página/função/algoritmo.
 - `concept-vision`: update — visão (objetivo, público, escopo, não-objetivos).
-- `sprint-task`: create|update|move|delete — `status` em backlog|doing|done.
+- `sprint-task`: update|move|delete — `status` em backlog|doing|done
+  (progresso e correções; `create` é rejeitado: tarefas nascem de
+  aprovações, nunca avulsas).
 - `page`: create|update|delete. `page-element`: create|update|delete.
 - `page-comment`: comment — `{elementId, text}` (comentário do agente).
 - `table`: create|update|delete. `table-column`: create|update|delete.
@@ -50,31 +53,36 @@ com aprovação do usuário para cada passo).
    `system_design_list_proposals(project, "pending")` e cite quantas
    propostas aguardam avaliação e de quais abas.
 
-## Propostas em cadeia (conceito implica execução)
+## Origem implica tarefas (nada avulso)
 
-Conceito e execução NÃO são coisas separadas: aprovar um conceito exige
-dar consequência a ele. Por isso, toda proposta de `concept-element`
-deve vir acompanhada das propostas implicadas, no mesmo lote:
+O usuário aprova páginas, algoritmos, elementos, conceitos, tabelas e
+relacionamentos — NUNCA tarefas avulsas. Tarefas nascem indiretamente:
 
-- `sprint-task` (backlog) com o trabalho de implementar o conceito;
-- `page` / `page-element` quando o conceito tem superfície visível;
-- `table` / `table-column` quando o conceito persiste dados;
+- `concept-element`, `page` e `table` em `create` exigem `tasks` com ao
+  menos 1 tarefa `{title, desc?, priority?, status?}` — sem isso o
+  `propose` é rejeitado.
+- `sprint-task` em `create` é REJEITADO sempre: embuta o trabalho na
+  origem (crie a origem com `tasks`, ou proponha `update` adicionando
+  `tasks` à origem aprovada).
+- `status` pode vir `done` com evidência quando o repo já executa
+  (sistemas existentes): cheque o código e cite a evidência no
+  `desc`/`reason` (arquivo, teste, migração).
+- Aprovar a origem cria as tasks na sprint com `origin` registrada
+  (tab/kind/id/título) — sem carta separada, sem nova aprovação.
+  Títulos duplicados são ignorados.
+- Movimentação e correção (`update`/`move`/`delete` em `sprint-task`)
+  continuam valendo para relatar progresso e corrigir.
 - `relation` somente após as tabelas existirem aprovadas (o dry-run
   rejeita FK para tabela inexistente — proponha as tabelas primeiro,
   aguarde aprovação, depois proponha as relações).
-
-Indique a cadeia no `reason` de cada proposta (ex.: "decorre do conceito
-'Checkout'; tarefa de implementação"). Se o usuário rejeitar o conceito,
-considere as propostas encadeadas órfãs e avise antes de re-propô-las.
 
 ## Qualidade mínima (anti-genérico)
 
 O `propose` REJEITA com erro proposta genérica — não tente contornar,
 melhore o conteúdo:
 
-- `concept-element` / `sprint-task` / `page` em `create`: `description`
-  (ou `desc`) com 20+ caracteres reais. "Título + referência solta"
-  (ex.: só nome + arquivo) é rejeitado.
+- `concept-element` / `page` / `table` em `create`: `description`
+  (ou `desc`) com 20+ caracteres reais + `tasks` com ao menos 1 tarefa.
 - `concept-vision`: ao menos 1 dos 4 campos preenchido.
 - Regra de bolso: cada proposta deve responder *o quê*, *por quê* e
   *onde vive no repo*. Elemento de interface/página sem descrição do
@@ -106,19 +114,22 @@ Por isso, todo artefato que represente o sistema deve ser REGISTRADO:
 
 ## Execução e status (aprovação vira trabalho)
 
-Aprovar NÃO executa: só registra. O trabalho acontece assim:
+Aprovar NÃO executa: só registra (e materializa as tarefas na sprint).
+O trabalho acontece assim:
 
 1. Quando o usuário pedir para executar (ex.: "execute a tarefa X" ou
    colar o prompt do botão "executar no chat"), leia a tarefa com
-   `system_design_get(project, "sprint")`.
+   `system_design_get(project, "sprint")` — filtre por origem/status
+   como o usuário faria na UI.
 2. Proponha `sprint-task` action `move` para `doing` e aguarde aprovação.
 3. Faça o trabalho de verdade no repo (código, migração, doc — o que a
    tarefa mandar), sem atalhos.
 4. Proponha `move` para `done` + uma proposta `page-comment`
    (action `comment`) na página/elemento afetado com o resumo do que foi
    feito (arquivos, comandos de verificação).
-5. Se travar, NÃO fique em silêncio: proponha `move` de volta para
-   `backlog` com o motivo em `reason` e explique ao usuário.
+5. Se emperrar, NÃO fique em silêncio: proponha `move` de volta para
+   `backlog` com o motivo em `reason` e explique ao usuário. O usuário
+   também pode reescrever a tarefa e movê-la de volta quando quiser.
 
 ## Relatório de status (dizer o que foi executado)
 
@@ -127,19 +138,5 @@ NUNCA responda de memória: leia na hora `system_design_get` das 4 abas
 + `system_design_list_proposals(project, "all")` e responda com números
 exatos: aprovadas aplicadas (por aba), pendentes aguardando avaliação,
 rejeitadas, tarefas por status (backlog/doing/done) e o próximo passo
-concreto. Sem leitura, sem resposta.
-
-## Conceito implica tarefas (pacote único)
-
-Tarefas NÃO vão ao inbox separadas: nascem descritas no conceito.
-
-- `concept-element` em `create` exige `tasks` com ao menos 1 tarefa
-  `{title, desc?, priority?, status?}` — sem isso o propose é rejeitado.
-- `status` pode vir `done` com evidência quando o repo já executa
-  (sistemas existentes): cheque o código antes e cite a evidência no
-  `desc`/`reason` (arquivo, teste, migração).
-- Aprovar o conceito cria as tasks na sprint automaticamente (sem carta
-  separada, sem nova aprovação). Títulos duplicados são ignorados.
-- Nunca proponha `sprint-task` avulsa para trabalho que pertence a um
-  conceito: embuta no elemento (crie o elemento com `tasks`, ou proponha
-  `update` adicionando `tasks` ao elemento aprovado).
+concreto. Sem leitura, sem resposta. Na sprint, filtre por origem
+(tab/kind), status e prioridade como a UI faz.

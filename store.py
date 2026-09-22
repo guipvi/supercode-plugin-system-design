@@ -10,7 +10,6 @@ Armazenamento (por projeto, acessível à UI e aos agentes):
 Regras de permissão:
 - O agente NUNCA escreve direto nos dados: ele cria PROPOSTAS (status pending).
 - O usuário aprova/rejeita cada proposta pela UI (inbox de propostas).
-- Alvos com ``locked=true`` não aceitam proposta de agente (erro) e a UI
   desabilita o botão de aprovar até o usuário destravar.
 - Edições diretas do usuário (actor="user") sempre são permitidas.
 """
@@ -117,11 +116,6 @@ def _check_enum(value, what, allowed, required=True, default=None):
         raise ValueError(f"{what} invalido: {value!r} (esperado um de {', '.join(allowed)})")
     return value
 
-
-def _check_bool(value, what):
-    if not isinstance(value, bool):
-        raise ValueError(f"{what} deve ser true/false")
-    return value
 
 
 def projects_root(root=None):
@@ -250,15 +244,12 @@ def apply_concept(data, target_id, action, payload, actor):
         elements.append({
             "id": validate_entity_id((payload or {}).get("id") or _new_id("e"), "id"),
             **clean,
-            "locked": False, "lockedBy": None, "lockedAt": None,
             "updatedBy": actor, "updatedAt": now,
         })
         return elements[-1]
     item = next((e for e in elements if e.get("id") == target_id), None)
     if item is None:
         raise ValueError("elemento nao encontrado")
-    if actor == "agent" and item.get("locked"):
-        raise ValueError("elemento bloqueado: o sistema nao pode alterar")
     if action == "update":
         clean = validate_concept_element(payload or {}, partial=True)
         for key, value in clean.items():
@@ -306,15 +297,12 @@ def apply_sprint(data, target_id, action, payload, actor):
         tasks.append({
             "id": validate_entity_id((payload or {}).get("id") or _new_id("t"), "id"),
             **clean,
-            "locked": False, "lockedBy": None, "lockedAt": None,
             "createdBy": actor, "createdAt": now, "updatedBy": actor, "updatedAt": now,
         })
         return tasks[-1]
     item = next((t for t in tasks if t.get("id") == target_id), None)
     if item is None:
         raise ValueError("tarefa nao encontrada")
-    if actor == "agent" and item.get("locked"):
-        raise ValueError("tarefa bloqueada: o sistema nao pode alterar")
     if action in ("update", "move"):
         clean = validate_task(payload or {}, partial=True)
         for key, value in clean.items():
@@ -338,6 +326,7 @@ def validate_page(payload, partial=False):
         "route": _check_str(payload.get("route"), "route", MAX_TITLE, required=False),
         "desc": _check_str(payload.get("desc"), "desc", MAX_DESC, required=False),
     }
+    out.update(_validate_tasks_field(payload, req))
     if out["route"] and not re.match(r"^[A-Za-z0-9/_.:-]{1,200}$", out["route"]):
         raise ValueError("route invalida")
     return out
@@ -379,15 +368,12 @@ def apply_pages(data, target_kind, target_id, action, payload, actor):
             pages.append({
                 "id": validate_entity_id(payload.get("id") or _new_id("p"), "id"),
                 **clean,
-                "locked": False, "lockedBy": None, "lockedAt": None,
-                "elements": [], "updatedBy": actor, "updatedAt": now,
+                    "elements": [], "updatedBy": actor, "updatedAt": now,
             })
             return pages[-1]
         page = next((p for p in pages if p.get("id") == target_id), None)
         if page is None:
             raise ValueError("pagina nao encontrada")
-        if actor == "agent" and page.get("locked"):
-            raise ValueError("pagina bloqueada: o sistema nao pode alterar")
         if action == "update":
             clean = validate_page(payload, partial=True)
             for key, value in clean.items():
@@ -406,8 +392,6 @@ def apply_pages(data, target_kind, target_id, action, payload, actor):
             raise ValueError("pageId obrigatorio")
         page = _find_page(data, page_id) if action == "create" else _find_page(data, payload.get("pageId") or _page_of(data, target_id))
         if action == "create":
-            if page.get("locked") and actor == "agent":
-                raise ValueError("pagina bloqueada: o sistema nao pode alterar")
             elements = page.setdefault("elements", [])
             if len(elements) >= MAX_PAGE_ELEMENTS:
                 raise ValueError("limite de elementos da pagina atingido")
@@ -416,14 +400,11 @@ def apply_pages(data, target_kind, target_id, action, payload, actor):
             elements.append({
                 "id": validate_entity_id(payload.get("id") or _new_id("el"), "id"),
                 **clean,
-                "locked": False, "lockedBy": None, "lockedAt": None,
-                "snapshotHtml": "", "comments": [],
+                    "snapshotHtml": "", "comments": [],
                 "updatedBy": actor, "updatedAt": now,
             })
             return elements[-1]
         owner_page_id, el = _find_element_anywhere(data, target_id)
-        if actor == "agent" and (el.get("locked") or _find_page(data, owner_page_id).get("locked")):
-            raise ValueError("elemento bloqueado: o sistema nao pode alterar")
         if action == "update":
             clean = validate_page_element(payload, partial=True)
             for key, value in clean.items():
@@ -489,10 +470,12 @@ def validate_table(payload, partial=False, sibling_names=()):
         lowered = [s.lower() for s in sibling_names]
         if name.lower() in lowered:
             raise ValueError(f"tabela '{name}' ja existe")
-    return {
+    out = {
         "name": name,
         "desc": _check_str(payload.get("desc"), "desc", MAX_DESC, required=False),
     }
+    out.update(_validate_tasks_field(payload, req))
+    return out
 
 
 def validate_column(payload, partial=False, sibling_names=(), tables=()):
@@ -561,13 +544,10 @@ def apply_tables(data, target_kind, target_id, action, payload, actor):
             tables.append({
                 "id": validate_entity_id(payload.get("id") or _new_id("tb"), "id"),
                 **clean,
-                "locked": False, "lockedBy": None, "lockedAt": None,
-                "columns": [], "updatedBy": actor, "updatedAt": now,
+                    "columns": [], "updatedBy": actor, "updatedAt": now,
             })
             return tables[-1]
         table = _find_table(data, target_id)
-        if actor == "agent" and table.get("locked"):
-            raise ValueError("tabela bloqueada: o sistema nao pode alterar")
         if action == "update":
             others = [n for n in _table_names(tables) if n != table.get("name")]
             clean = validate_table(payload, partial=True, sibling_names=others)
@@ -592,8 +572,6 @@ def apply_tables(data, target_kind, target_id, action, payload, actor):
             if not table_id:
                 raise ValueError("tableId obrigatorio")
             table = _find_table(data, table_id)
-            if actor == "agent" and table.get("locked"):
-                raise ValueError("tabela bloqueada: o sistema nao pode alterar")
             columns = table.setdefault("columns", [])
             if len(columns) >= MAX_COLUMNS:
                 raise ValueError("limite de colunas atingido")
@@ -602,13 +580,10 @@ def apply_tables(data, target_kind, target_id, action, payload, actor):
             columns.append({
                 "id": validate_entity_id(payload.get("id") or _new_id("col"), "id"),
                 **clean,
-                "locked": False, "lockedBy": None, "lockedAt": None,
-                "updatedBy": actor, "updatedAt": now,
+                    "updatedBy": actor, "updatedAt": now,
             })
             return columns[-1]
         owner, col = _find_column_anywhere(data, target_id)
-        if actor == "agent" and (col.get("locked") or owner.get("locked")):
-            raise ValueError("coluna bloqueada: o sistema nao pode alterar")
         if action == "update":
             others = [c.get("name", "") for c in owner.get("columns", []) if c.get("id") != target_id]
             if "name" in payload and payload["name"] != col.get("name"):
@@ -638,15 +613,12 @@ def apply_tables(data, target_kind, target_id, action, payload, actor):
             relations.append({
                 "id": validate_entity_id(payload.get("id") or _new_id("rel"), "id"),
                 **clean,
-                "locked": False, "lockedBy": None, "lockedAt": None,
-                "updatedBy": actor, "updatedAt": now,
+                    "updatedBy": actor, "updatedAt": now,
             })
             return relations[-1]
         rel = next((r for r in relations if r.get("id") == target_id), None)
         if rel is None:
             raise ValueError("relacao nao encontrada")
-        if actor == "agent" and rel.get("locked"):
-            raise ValueError("relacao bloqueada: o sistema nao pode alterar")
         if action == "update":
             if any(k in payload for k in ("fromTable", "fromColumn", "toTable", "toColumn")):
                 raise ValueError("alterar pontas da relacao exige remover e recriar")
@@ -714,6 +686,7 @@ RICH_FIELDS = {
                                      ("details", MIN_RICH_TEXT)),
     ("sprint", "sprint-task"): (("desc", MIN_RICH_TEXT),),
     ("pages", "page"): (("desc", MIN_RICH_TEXT),),
+    ("tables", "table"): (("desc", MIN_RICH_TEXT),),
     # visao: update vazio nao significa nada; exige ao menos 1 campo preenchido
     ("concept", "concept-vision"): (("objective", 1), ("audience", 1),
                                     ("scope", 1), ("nonGoals", 1)),
@@ -721,7 +694,17 @@ RICH_FIELDS = {
 
 
 def _check_not_generic(tab, target_kind, action, payload):
-    """Rejeita proposta generica demais do agente (create; vision: update)."""
+    """Rejeita proposta generica demais do agente (create; vision: update).
+
+    Tarefas NAO sao aceitas a parte: sprint-task em create e rejeitado
+    sempre — tarefas nascem de aprovacoes (conceito/pagina/tabela).
+    Movimentacao e correcao (update/move/delete) continuam permitidas.
+    """
+    if tab == "sprint" and target_kind == "sprint-task" and action == "create":
+        raise ValueError(
+            "tarefas nao sao aceitas a parte: sprint-task.create do agente esta "
+            "desativado. Descreva o trabalho em 'tasks' do conceito/pagina/tabela "
+            "correspondente (create ou update) — aprovar a origem cria as tasks.")
     if action == "create":
         spec = RICH_FIELDS.get((tab, target_kind))
         if not spec:
@@ -730,13 +713,14 @@ def _check_not_generic(tab, target_kind, action, payload):
         spec = RICH_FIELDS[(tab, target_kind)]
     else:
         return
-    if (tab, target_kind) == ("concept", "concept-element") and action == "create":
+    if action == "create" and (tab, target_kind) in (
+            ("concept", "concept-element"), ("pages", "page"), ("tables", "table")):
         briefs = (payload or {}).get("tasks")
         if (not isinstance(briefs, list) or not [
                 x for x in briefs
                 if isinstance(x, dict) and str(x.get("title", "")).strip()]):
             raise ValueError(
-                "conceito implica tarefas: concept-element.create do agente exige "
+                f"proposta generica: {target_kind}.create do agente exige origem que implica tarefas: "
                 "'tasks' com ao menos 1 tarefa {title, desc?, priority?, status?} "
                 "descrevendo o trabalho que o conceito demanda (status pode vir "
                 "'done' com evidencia quando o repo ja executa). Tarefa avulsa "
@@ -771,7 +755,7 @@ def validate_proposal(tab, target_kind, target_id, action, payload, reason):
 
 
 def propose(root, project, tab, target_kind, target_id, action, payload, reason=""):
-    """Cria uma proposta de AGENTE (actor=agent). Valida locks e esquema."""
+    """Cria uma proposta de AGENTE (actor=agent). Valida esquema."""
     validate_project_id(project)
     validate_proposal(tab, target_kind, target_id, action, payload or {}, reason)
     _check_not_generic(tab, target_kind, action, payload or {})
@@ -785,7 +769,7 @@ def propose(root, project, tab, target_kind, target_id, action, payload, reason=
         decided = [p for p in proposals if p.get("status") != "pending"]
         for old in sorted(decided, key=lambda p: p.get("decidedAt") or p.get("createdAt") or "")[: len(proposals) - MAX_PROPOSALS + 1]:
             proposals.remove(old)
-    # dry-run contra os dados atuais para barrar locks e erros de esquema
+    # dry-run contra os dados atuais para validar o esquema
     _dry_run(root, project, tab, target_kind, target_id, action, payload or {})
     proposal = {
         "id": _new_id("prop"),
@@ -806,7 +790,7 @@ def propose(root, project, tab, target_kind, target_id, action, payload, reason=
 
 
 def _dry_run(root, project, tab, target_kind, target_id, action, payload):
-    """Executa a mudança em cópia para validar (locks + esquema) sem salvar."""
+    """Executa a mudança em cópia para validar o esquema sem salvar."""
     import copy
     if tab == "concept":
         data = copy.deepcopy(load_data(root, project, CONCEPT_FILE))
@@ -832,7 +816,19 @@ def _dry_run(root, project, tab, target_kind, target_id, action, payload):
     raise ValueError(f"tab invalida: {tab!r}")
 
 
-def _spawn_implied_tasks(root, project, element, actor):
+def _validate_tasks_field(payload, req):
+    """Campo opcional 'tasks' ([{title, desc?, priority?, status?}])."""
+    if "tasks" not in (payload or {}):
+        return {"tasks": []} if req else {}
+    raw = payload.get("tasks")
+    if raw is None:
+        return {"tasks": []}
+    if not isinstance(raw, list):
+        raise ValueError("'tasks' deve ser uma lista")
+    return {"tasks": [validate_task_brief(x) for x in raw]}
+
+
+def _spawn_implied_tasks(root, project, element, actor, origin=None):
     """Aprovar conceito = aprovar o pacote: cria as sprint tasks embutidas.
 
     Idempotente por titulo (re-aprovacao ou update repetido nao duplica).
@@ -841,6 +837,11 @@ def _spawn_implied_tasks(root, project, element, actor):
     wanted = (element or {}).get("tasks") or []
     if not wanted:
         return []
+    origin = origin or {}
+    if isinstance(element, dict) and element.get("id") and not origin.get("id"):
+        origin = {"tab": origin.get("tab"), "kind": origin.get("kind"),
+                  "id": element.get("id"),
+                  "title": element.get("title") or element.get("name")}
     data = load_data(root, project, SPRINT_FILE)
     tasks = data.setdefault("tasks", [])
     existing = {str(x.get("title", "")).strip().lower() for x in tasks}
@@ -856,8 +857,9 @@ def _spawn_implied_tasks(root, project, element, actor):
             "desc": str(item.get("desc", "") or "")[:MAX_DESC],
             "priority": item.get("priority") if item.get("priority") in PRIORITIES else "media",
             "status": item.get("status") if item.get("status") in STATUSES else "backlog",
-            "locked": False, "lockedBy": None, "lockedAt": None,
-            "createdBy": f"{actor}:conceito",
+            "origin": {"tab": origin.get("tab"), "kind": origin.get("kind"),
+                       "id": origin.get("id"), "title": origin.get("title")},
+            "createdBy": f"{actor}:{origin.get('kind') or 'origem'}",
             "createdAt": now, "updatedBy": actor, "updatedAt": now,
         })
         existing.add(title.lower())
@@ -885,20 +887,18 @@ def decide(root, project, proposal_id, approve, by="user"):
         return {"status": "rejected", "proposal": proposal}
     tab = proposal["tab"]
     file_map = {"concept": CONCEPT_FILE, "sprint": SPRINT_FILE, "pages": PAGES_FILE, "tables": TABLES_FILE}
-    # re-checa o lock no momento da aprovação: travar depois de propor bloqueia
-    if proposal.get("targetId"):
-        current = load_data(root, project, file_map[tab])
-        target = _resolve_target(current, tab, proposal["targetKind"], proposal["targetId"])
-        if target.get("locked"):
-            raise ValueError("alvo travado: destrave para aprovar")
     data = load_data(root, project, file_map[tab])
     result = _apply_decision(data, proposal)
     save_data(root, project, file_map[tab], data)
     spawned = []
-    if (tab == "concept" and proposal.get("targetKind") == "concept-element"
-            and proposal.get("action") in ("create", "update")
-            and isinstance(result, dict) and result.get("id") and "title" in result):
-        spawned = _spawn_implied_tasks(root, project, result, "agent-aprovado")
+    if (proposal.get("action") in ("create", "update")
+            and isinstance(result, dict) and result.get("id")
+            and (tab, proposal.get("targetKind")) in (
+                ("concept", "concept-element"), ("pages", "page"), ("tables", "table"))
+            and ("title" in result or "name" in result)):
+        spawned = _spawn_implied_tasks(
+            root, project, result, "agent-aprovado",
+            {"tab": tab, "kind": proposal.get("targetKind")})
     proposal["status"] = "approved"
     proposal["decidedAt"] = utcnow()
     proposal["applied"] = result
@@ -928,7 +928,7 @@ def _apply_decision(data, proposal):
 
 
 def user_action(root, project, tab, target_kind, target_id, action, payload):
-    """Edição direta do USUÁRIO (actor=user): locks não bloqueiam."""
+    """Edição direta do USUÁRIO (actor=user)."""
     validate_project_id(project)
     file_map = {"concept": CONCEPT_FILE, "sprint": SPRINT_FILE, "pages": PAGES_FILE, "tables": TABLES_FILE}
     if tab not in file_map:
@@ -942,7 +942,8 @@ def user_action(root, project, tab, target_kind, target_id, action, payload):
             result = apply_concept(data, target_id, action, payload, "user")
             if action in ("create", "update") and isinstance(result, dict) and result.get("id") and "title" in result:
                 save_data(root, project, file_map[tab], data)
-                _spawn_implied_tasks(root, project, result, "user")
+                _spawn_implied_tasks(root, project, result, "user",
+                                     {"tab": tab, "kind": target_kind})
                 data = load_data(root, project, file_map[tab])
         else:
             raise ValueError(f"alvo invalido para conceito: {target_kind!r}")
@@ -950,57 +951,18 @@ def user_action(root, project, tab, target_kind, target_id, action, payload):
         result = apply_sprint(data, target_id, action, payload, "user")
     elif tab == "pages":
         result = apply_pages(data, target_kind, target_id, action, payload, "user")
+        if target_kind == "page" and action in ("create", "update") and isinstance(result, dict) and result.get("id") and "name" in result:
+            save_data(root, project, file_map[tab], data)
+            _spawn_implied_tasks(root, project, result, "user", {"tab": tab, "kind": target_kind})
+            data = load_data(root, project, file_map[tab])
     else:
         result = apply_tables(data, target_kind, target_id, action, payload, "user")
+        if target_kind == "table" and action in ("create", "update") and isinstance(result, dict) and result.get("id") and "name" in result:
+            save_data(root, project, file_map[tab], data)
+            _spawn_implied_tasks(root, project, result, "user", {"tab": tab, "kind": target_kind})
+            data = load_data(root, project, file_map[tab])
     save_data(root, project, file_map[tab], data)
     return result
 
 
-def set_lock(root, project, tab, target_kind, target_id, locked, by="user"):
-    """Trava/destrava um alvo. Só o usuário pode travar (agente: erro)."""
-    if by != "user":
-        raise ValueError("apenas o usuario pode travar/destravar")
-    _check_bool(locked, "locked")
-    file_map = {"concept": CONCEPT_FILE, "sprint": SPRINT_FILE, "pages": PAGES_FILE, "tables": TABLES_FILE}
-    data = load_data(root, project, file_map[tab])
-    target = _resolve_target(data, tab, target_kind, target_id)
-    now = utcnow()
-    target["locked"] = locked
-    target["lockedBy"] = by if locked else None
-    target["lockedAt"] = now if locked else None
-    target["updatedBy"] = by
-    target["updatedAt"] = now
-    save_data(root, project, file_map[tab], data)
-    return target
 
-
-def _resolve_target(data, tab, target_kind, target_id):
-    validate_entity_id(target_id, "targetId")
-    if tab == "concept" and target_kind == "concept-element":
-        item = next((e for e in data.get("elements", []) if e.get("id") == target_id), None)
-        if item is None:
-            raise ValueError("elemento nao encontrado")
-        return item
-    if tab == "sprint" and target_kind == "sprint-task":
-        item = next((t for t in data.get("tasks", []) if t.get("id") == target_id), None)
-        if item is None:
-            raise ValueError("tarefa nao encontrada")
-        return item
-    if tab == "pages" and target_kind in ("page", "page-element", "table-column"):
-        if target_kind == "page":
-            return _find_page(data, target_id)
-        _, el = _find_element_anywhere(data, target_id)
-        return el
-    if tab == "pages" and target_kind == "page-comment":
-        raise ValueError("comentarios nao sao travaveis")
-    if tab == "tables" and target_kind in ("table", "table-column", "relation"):
-        if target_kind == "table":
-            return _find_table(data, target_id)
-        if target_kind == "table-column":
-            _, col = _find_column_anywhere(data, target_id)
-            return col
-        rel = next((r for r in data.get("relations", []) if r.get("id") == target_id), None)
-        if rel is None:
-            raise ValueError("relacao nao encontrada")
-        return rel
-    raise ValueError("alvo invalido para lock")

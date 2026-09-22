@@ -2,7 +2,7 @@
 
 O chat NUNCA escreve direto nos arquivos de dados: ele cria PROPOSTAS via
 ``system_design_propose`` e o usuário aprova/rejeita pela UI do plugin.
-Alvos com ``locked=true`` rejeitam propostas com erro.
+Toda proposta passa pelo inbox — nao existem travas; reescrever e mover de volta e sempre permitido ao usuario.
 
 Dados: <projectsRoot>/<project>/.opencode/system-design/*.json
 """
@@ -103,17 +103,19 @@ if mcp is not None:
                               target_id: str = "", reason: str = "") -> dict:
         """Propõe uma mudança (vira pending; o usuário aprova pela UI).
         NUNCA edite os arquivos .opencode/system-design/ diretamente.
-        Alvos com `locked=true` rejeitam propostas com erro.
         QUALIDADE MINIMA (rejeitado com erro se generico): `concept-element`,
-        `sprint-task` e `page` em `create` exigem `description`/`desc` com 20+
+        `page` e `table` em `create` exigem `description`/`desc` com 20+
         caracteres reais (responsabilidades, regras, onde vive no repo);
         `concept-vision` exige ao menos 1 campo preenchido. Nunca proponha
         titulo + referencia solta.
-        CONCEITO IMPLICA TAREFAS: `concept-element` em `create` exige
-        `tasks` ([{title, desc?, priority?, status?}], ao menos 1) — aprovar
-        o conceito cria as tasks na sprint (sem carta separada). `status`
-        pode vir `done` com evidencia quando o repo ja executa. Nunca
-        proponha sprint-task avulsa para trabalho de um conceito.
+        ORIGEM IMPLICA TAREFAS (nada avulso): aprova-se pagina, algoritmo,
+        elemento, conceito, tabela e relacionamento — tarefas nascem
+        indiretamente. `concept-element`, `page` e `table` em `create`
+        exigem `tasks` ([{title, desc?, priority?, status?}], ao menos 1);
+        aprovar a origem cria as tasks na sprint com origem registrada.
+        `status` pode vir `done` com evidencia quando o repo ja executa.
+        `sprint-task` em `create` e REJEITADO; `update`/`move`/`delete`
+        valem para progresso e correcoes.
         Args:
             project: id do projeto. tab: concept|sprint|pages|tables.
             target_kind: concept-element|sprint-task|page|page-element|page-comment|table|table-column|relation.
