@@ -118,3 +118,10 @@ def test_view_button_and_modal():
     assert "function viewTask(" in html
     assert "descHtml(" in html and "linkify(" in html
     assert "target=\"_blank\"" in html
+
+
+def test_table_list_shows_column_names():
+    html = read_ui()
+    assert "validateEmbeddedColumns" in html
+    assert "c.name" in html
+    assert "data-open-t=" in html

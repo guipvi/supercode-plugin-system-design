@@ -45,3 +45,8 @@ def test_tutorial_rule():
     text = read_instructions()
     for token in ("tutorial", "[texto](https://", "owner=user", "ver"):
         assert token in text, f"regra tutorial ausente: {token}"
+
+
+def test_columns_in_create():
+    text = read_instructions()
+    assert "columns: [{name" in text

@@ -395,3 +395,26 @@ def test_incomplete_no_advance_bad_choice(root):
         store.user_action(root, PROJ, "sprint", "sprint-task", t["id"], "update",
                           {"questions": [{"id": "q9", "question": "C?", "type": "choice",
                                           "options": ["a", "b"], "answer": "z"}]})
+
+
+def test_table_create_with_columns(root):
+    tb = store.user_action(root, PROJ, "tables", "table", None, "create",
+                           {"name": "usuarios",
+                            "desc": "usuarios do sistema com email e senha",
+                            "columns": [
+                                {"name": "id", "type": "integer", "pk": True},
+                                {"name": "email", "type": "text"},
+                                "senha"]})
+    assert [c["name"] for c in tb["columns"]] == ["id", "email", "senha"]
+    assert tb["columns"][0]["pk"] is True
+    got = store.load_data(root, PROJ, store.TABLES_FILE)["tables"][0]
+    assert len(got["columns"]) == 3
+
+
+def test_table_create_columns_dup_rejected(root):
+    import pytest as _pt
+    with _pt.raises(ValueError, match="ja existe"):
+        store.user_action(root, PROJ, "tables", "table", None, "create",
+                          {"name": "dup",
+                           "desc": "tabela com colunas duplicadas",
+                           "columns": ["id", "id"]})

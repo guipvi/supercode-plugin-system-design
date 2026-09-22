@@ -118,7 +118,7 @@ if mcp is not None:
         """Propõe uma mudança (vira pending; o usuário aprova pela UI).
         NUNCA edite os arquivos .opencode/system-design/ diretamente.
         QUALIDADE MINIMA (rejeitado com erro se generico): `concept-element`,
-        `page` e `table` em `create` exigem `description`/`desc` com 20+
+        `page` e `table` em `create` exigem `description`/`desc` com 20+ … `table` também aceita `columns: [{name, type?, pk?, nullable?, fk?}]` no mesmo create (a UI lista os nomes).
         caracteres reais (responsabilidades, regras, onde vive no repo);
         `concept-vision` exige ao menos 1 campo preenchido. Nunca proponha
         titulo + referencia solta.

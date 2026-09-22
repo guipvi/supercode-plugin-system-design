@@ -215,3 +215,10 @@ TUTORIAL de execução, com:
 A UI renderiza `desc` com os links clicáveis no botão **ver** da task
 (/modal de detalhe). Não encaixote o tutorial só no chat: ele vive na
 `desc`.
+
+## Colunas da tabela no mesmo create
+
+`table` em `create` aceita `columns: [{name, type?, pk?, nullable?, desc?, fk?}]`
+no payload — a UI lista os nomes (chave/PK e FK no título). Sem colunas no
+create, a tabela nasce vazia e a coluna `Colunas` fica "—". Prefira modelar
+tudo de uma vez; colunas novas depois vão em `table-column` create.

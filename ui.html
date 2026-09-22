@@ -764,7 +764,7 @@ let OPEN_TABLE=null;
 function applyTables(kind,tid,action,payload,actor){
   const d=CACHE[FILES.tables]; payload=payload||{};
   if(kind==='table'){
-    if(action==='create'){ if(d.tables.length>=200) throw new Error('limite de tabelas'); const name=vTableName(payload.name,d.tables.map(t=>t.name)); const now=new Date().toISOString(); const tb={id:vId(payload.id||uid('tb')),name,desc:vStr(payload.desc,'desc',5000,false),tasks:Array.isArray(payload.tasks)?payload.tasks.map(vTaskBrief):[],columns:[],updatedBy:actor,updatedAt:now}; d.tables.push(tb); spawnImpliedTasksUI(tb,actor,{tab:'tables',kind:'table'}); return tb; }
+    if(action==='create'){ if(d.tables.length>=200) throw new Error('limite de tabelas'); const name=vTableName(payload.name,d.tables.map(t=>t.name)); const now=new Date().toISOString(); const tb={id:vId(payload.id||uid('tb')),name,desc:vStr(payload.desc,'desc',5000,false),tasks:Array.isArray(payload.tasks)?payload.tasks.map(vTaskBrief):[],columns:('columns' in payload)?validateEmbeddedColumns(payload.columns,d.tables):[],updatedBy:actor,updatedAt:now}; d.tables.push(tb); spawnImpliedTasksUI(tb,actor,{tab:'tables',kind:'table'}); return tb; }
     const tb=d.tables.find(t=>t.id===tid); if(!tb) throw new Error('tabela nao encontrada');
     if(action==='update'){ if('desc' in payload) tb.desc=vStr(payload.desc,'desc',5000,false); if('tasks' in payload) tb.tasks=Array.isArray(payload.tasks)?payload.tasks.map(vTaskBrief):[]; tb.updatedBy=actor; tb.updatedAt=new Date().toISOString(); spawnImpliedTasksUI(tb,actor,{tab:'tables',kind:'table'}); return tb; }
     if(action==='delete'){ const refs=referencedBy(tb.name); if(refs.length) throw new Error('tabela referenciada por: '+refs.slice(0,5).join(', ')); d.tables=d.tables.filter(t=>t.id!==tid); if(OPEN_TABLE===tid) OPEN_TABLE=null; return {deleted:tid}; }
@@ -785,6 +785,20 @@ function applyTables(kind,tid,action,payload,actor){
     throw new Error('acao invalida');
   }
   throw new Error('alvo invalido');
+}
+function validateEmbeddedColumns(raw,tables){
+  if(raw==null) return [];
+  if(!Array.isArray(raw)) throw new Error("'columns' deve ser uma lista");
+  if(raw.length>100) throw new Error('limite de colunas');
+  const out=[],names=[];
+  for(let i=0;i<raw.length;i++){
+    let item=raw[i];
+    if(typeof item==='string') item={name:item};
+    if(!item||typeof item!=='object') throw new Error('columns['+i+'] invalida');
+    const col=validateColumn(item,names.slice(),tables);
+    names.push(col.name); out.push(col);
+  }
+  return out;
 }
 function validateColumn(p,siblings,tables){
   const partial=p._partial; const req=!partial;
@@ -873,7 +887,7 @@ function tabs_find_id(tname){ const t=(CACHE[FILES.tables].tables||[]).find(x=>x
 function renderTables(){
   const d=CACHE[FILES.tables];
   try{ renderDiagram(d); }catch(e){ console.warn('diagrama:',e.message); }
-  $('tables-list').innerHTML=d.tables.length?'<table><tr><th>Tabela</th><th>Colunas</th><th></th></tr>'+d.tables.map(t=>`<tr><td><strong class="mono">${esc(t.name)}</strong> <br><span class="muted">${esc((t.desc||'').slice(0,120))}</span></td><td>${(t.columns||[]).length}</td><td style="white-space:nowrap"><button class="sm" data-open-t="${esc(t.id)}">abrir</button><button class="danger sm" data-del-t="${esc(t.id)}">x</button></td></tr>`).join('')+'</table>':'<span class="muted">Nenhuma tabela. Modele as entidades do sistema.</span>';
+  $('tables-list').innerHTML=d.tables.length?'<table><tr><th>Tabela</th><th>Colunas</th><th></th></tr>'+d.tables.map(t=>`<tr><td><strong class="mono">${esc(t.name)}</strong> <br><span class="muted">${esc((t.desc||'').slice(0,120))}</span></td><td>${(t.columns||[]).length?`<div style="display:flex;flex-wrap:wrap;gap:.2rem;max-width:28rem">${(t.columns||[]).slice(0,24).map(c=>`<span class="tag dim mono" title="${esc(c.type||'')}${c.pk?' · PK':''}${c.fk?' · FK→'+esc(c.fk.table+'.'+c.fk.column):''}">${c.pk?'\uD83D\uDD11 ':''}${esc(c.name)}</span>`).join('')}${(t.columns||[]).length>24?`<span class="muted">+${(t.columns||[]).length-24}</span>`:''}</div>`:'<span class="muted">—</span>'}</td><td style="white-space:nowrap"><button class="sm" data-open-t="${esc(t.id)}">abrir</button><button class="danger sm" data-del-t="${esc(t.id)}">x</button></td></tr>`).join('')+'</table>':'<span class="muted">Nenhuma tabela. Modele as entidades do sistema.</span>';
   $('tables-list').querySelectorAll('[data-open-t]').forEach(b=>b.onclick=()=>{OPEN_TABLE=b.dataset.openT;renderTableDetail();});
   $('tables-list').querySelectorAll('[data-del-t]').forEach(b=>b.onclick=()=>delTable(b.dataset.delT));
   $('relations-list').innerHTML=d.relations.length?'<table><tr><th>De</th><th></th><th>Para</th><th></th></tr>'+d.relations.map(r=>`<tr><td class="mono">${esc(r.fromTable)}.${esc(r.fromColumn)}</td><td><span class="tag dim">${esc(r.cardinality)}</span></td><td class="mono">${esc(r.toTable)}.${esc(r.toColumn)}</td><td style="white-space:nowrap"><button class="danger sm" data-del-r="${esc(r.id)}">x</button></td></tr>`).join('')+'</table>':'<span class="muted">Sem relações.</span>';

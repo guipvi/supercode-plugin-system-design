@@ -602,6 +602,27 @@ def _table_names(tables):
     return [t.get("name", "") for t in tables]
 
 
+def _validate_embedded_columns(raw, tables=()):
+    """Colunas vindas no create da tabela: [{name, type?, pk?, nullable?, desc?, fk?}]."""
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise ValueError("'columns' deve ser uma lista")
+    if len(raw) > MAX_COLUMNS:
+        raise ValueError("limite de colunas")
+    out = []
+    names = []
+    for i, item in enumerate(raw):
+        if isinstance(item, str):
+            item = {"name": item}
+        if not isinstance(item, dict):
+            raise ValueError(f"columns[{i}] invalida")
+        col = validate_column(item, sibling_names=names, tables=tables)
+        names.append(col.get("name") or "")
+        out.append(col)
+    return out
+
+
 def validate_table(payload, partial=False, sibling_names=()):
     req = (not partial)
     name = _check_str(payload.get("name"), "name", 120, required=req)
@@ -616,6 +637,8 @@ def validate_table(payload, partial=False, sibling_names=()):
         "desc": _check_str(payload.get("desc"), "desc", MAX_DESC, required=False),
     }
     out.update(_validate_tasks_field(payload, req))
+    if "columns" in payload and not partial:
+        out["columns"] = _validate_embedded_columns(payload.get("columns"), tables=())
     return out
 
 
@@ -682,10 +705,12 @@ def apply_tables(data, target_kind, target_id, action, payload, actor):
                 raise ValueError("limite de tabelas atingido")
             clean = validate_table(payload, sibling_names=_table_names(tables))
             now = utcnow()
+            cols = clean.pop("columns", [])
             tables.append({
                 "id": validate_entity_id(payload.get("id") or _new_id("tb"), "id"),
                 **clean,
-                    "columns": [], "updatedBy": actor, "updatedAt": now,
+                "columns": cols,
+                "updatedBy": actor, "updatedAt": now,
             })
             return tables[-1]
         table = _find_table(data, target_id)
