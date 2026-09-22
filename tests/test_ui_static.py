@@ -110,3 +110,11 @@ def test_no_secrets_hardcoded():
     assert "gsk_" not in html
     assert "sk-ant-" not in html
     assert "METRICS_API_TOKEN" not in html
+
+
+def test_view_button_and_modal():
+    html = read_ui()
+    assert "data-view-t=" in html
+    assert "function viewTask(" in html
+    assert "descHtml(" in html and "linkify(" in html
+    assert "target=\"_blank\"" in html

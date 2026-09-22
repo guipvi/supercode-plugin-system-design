@@ -39,3 +39,9 @@ def test_only_user_decides():
     text = read_instructions().lower()
     assert "usuário" in text or "usuario" in text
     assert "aprov" in text
+
+
+def test_tutorial_rule():
+    text = read_instructions()
+    for token in ("tutorial", "[texto](https://", "owner=user", "ver"):
+        assert token in text, f"regra tutorial ausente: {token}"

@@ -535,6 +535,30 @@ function advanceTaskUI(t,actor){
   t.status=target; t.owner=autoOwner(target);
   return target;
 }
+function linkify(s){
+  return s.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
+    (m,txt,url)=>`<a href="${url}" target="_blank" rel="noopener noreferrer">${txt}</a>`)
+    .replace(/(?<![">])(https?:\/\/[^\s<]+[^\s<.,;:!?)\"'])/g,
+    (url)=>`<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`);
+}
+function descHtml(desc){
+  const s=String(desc||'');
+  if(!s) return '<span class="muted">sem descrição</span>';
+  return linkify(esc(s)).replace(/\n/g,'<br>');
+}
+function viewTask(id){
+  const t=(CACHE[FILES.sprint].tasks||[]).find(x=>x.id===id);
+  if(!t) return;
+  const o=t.origin||{};
+  const q=(t.questions||[]);
+  openModal(`<h2 style="color:#93c5fd;margin-bottom:.5rem">${esc(t.title)}</h2>
+  <div class="row" style="flex-wrap:wrap;gap:.35rem;margin-bottom:.6rem">${originTag(t)} ${ownerTag(t)} <span class="tag">${STATUS_LABEL[t.status]||esc(t.status)}</span> <span class="tag dim">prioridade ${Number(t.priority)||5}</span>${t.assignee?`<span class="tag dim">${esc(t.assignee)}</span>`:''}</div>
+  ${o.tab?`<div class="muted" style="margin-bottom:.5rem">origem: ${esc(o.tab)}${o.kind?': '+esc(o.kind):''}${o.title?' · '+esc(o.title):''}</div>`:''}
+  <div class="det-desc" style="white-space:normal;line-height:1.5;margin-bottom:.6rem">${descHtml(t.desc)}</div>
+  ${q.length?`<h3 style="margin:.4rem 0">Perguntas</h3>`+q.map(x=>`<div class="comment"><div class="who">${esc(x.question)}${x.answeredAt?` · respondido por ${esc(x.answeredBy||'?')}`:''}</div><div class="txt">${descHtml(x.answer||'—')}</div></div>`).join(''):''}
+  <div class="muted" style="margin-top:.5rem;font-size:.85em">criado ${esc((t.createdAt||'').replace('T',' ').slice(0,16))} · atualizado ${esc((t.updatedAt||'').replace('T',' ').slice(0,16))} por ${esc(t.updatedBy||t.createdBy||'?')}</div>
+  <div class="row" style="margin-top:.7rem"><button class="ghost" onclick="closeModal()">Fechar</button></div>`);
+}
 function originTag(t){ const o=t.origin||{}; if(!o.tab) return '<span class="tag dim">avulsa</span>'; const label=o.title||o.id||o.kind||''; return `<span class="tag" title="${esc(o.tab)} · ${esc(o.kind||'')} · ${esc(o.id||'')}">↩ ${esc(o.tab)}${label?': '+esc(String(label).slice(0,40)):''}</span>`; }
 function sprintFiltered(){
   const d=CACHE[FILES.sprint];
@@ -561,10 +585,11 @@ function renderSprint(){
   $('sprint-cols').innerHTML=Object.keys(STATUS_LABEL).map(st=>{
     const ts=list.filter(t=>t.status===st);
     return `<div class="col" data-col="${st}"><h3>${STATUS_LABEL[st]} <span class="tag dim">${ts.length}</span></h3>`+(ts.length?ts.map(t=>{const moves=USER_MOVES[t.status]||[];
-    return `<div class="task" draggable="true" data-task="${esc(t.id)}"><div class="t">${esc(t.title)} </div><div>${originTag(t)} ${ownerTag(t)}</div><div class="muted">${esc((t.desc||'').slice(0,120))}</div><div class="muted">prioridade: <input type="number" class="prio-num" min="1" max="10" value="${Number(t.priority)||5}" data-prio="${esc(t.id)}" title="1 baixo – 10 muito alta">${t.assignee?' · '+esc(t.assignee):''}</div><div class="row mv-arrows" style="margin-top:.35rem">${moves.map(m=>`<button class="ghost sm" data-mv="${esc(t.id)}|${m}">${STATUS_LABEL[m].slice(0,12)}${m==='backlog'?' ←':m==='doing'?' ⇄':' →'}</button>`).join('')}<button class="ghost sm" data-edit-t="${esc(t.id)}">editar</button><button class="danger sm" data-del-t="${esc(t.id)}">x</button></div><select class="mv-select" data-mvsel="${esc(t.id)}"><option value="">mover para…</option>${Object.keys(STATUS_LABEL).filter(m=>m!==t.status).map(m=>`<option value="${m}">${STATUS_LABEL[m]}</option>`).join('')}</select>${qFormHtml(t)}</div>`;}).join(''):'<span class="muted">vazio</span>')+`</div>`;
+    return `<div class="task" draggable="true" data-task="${esc(t.id)}"><div class="t">${esc(t.title)} </div><div>${originTag(t)} ${ownerTag(t)}</div><div class="muted">${esc((t.desc||'').slice(0,120))}</div><div class="muted">prioridade: <input type="number" class="prio-num" min="1" max="10" value="${Number(t.priority)||5}" data-prio="${esc(t.id)}" title="1 baixo – 10 muito alta">${t.assignee?' · '+esc(t.assignee):''}</div><div class="row mv-arrows" style="margin-top:.35rem">${moves.map(m=>`<button class="ghost sm" data-mv="${esc(t.id)}|${m}">${STATUS_LABEL[m].slice(0,12)}${m==='backlog'?' ←':m==='doing'?' ⇄':' →'}</button>`).join('')}<button class="ghost sm" data-view-t="${esc(t.id)}">ver</button><button class="ghost sm" data-edit-t="${esc(t.id)}">editar</button><button class="danger sm" data-del-t="${esc(t.id)}">x</button></div><select class="mv-select" data-mvsel="${esc(t.id)}"><option value="">mover para…</option>${Object.keys(STATUS_LABEL).filter(m=>m!==t.status).map(m=>`<option value="${m}">${STATUS_LABEL[m]}</option>`).join('')}</select>${qFormHtml(t)}</div>`;}).join(''):'<span class="muted">vazio</span>')+`</div>`;
   }).join('');
   $('sprint-cols').querySelectorAll('[data-mv]').forEach(b=>b.onclick=()=>moveTask(b.dataset.mv.split('|')[0],b.dataset.mv.split('|')[1]));
   $('sprint-cols').querySelectorAll('[data-mvsel]').forEach(s=>s.onchange=()=>{ if(s.value) moveTask(s.dataset.mvsel,s.value); s.value=''; });
+  $('sprint-cols').querySelectorAll('[data-view-t]').forEach(b=>b.onclick=()=>viewTask(b.dataset.viewT));
   $('sprint-cols').querySelectorAll('[data-edit-t]').forEach(b=>b.onclick=()=>editTask(b.dataset.editT));
   $('sprint-cols').querySelectorAll('[data-del-t]').forEach(b=>b.onclick=()=>delTask(b.dataset.delT));
   $('sprint-cols').querySelectorAll('[data-prio]').forEach(i=>i.onchange=()=>setPrio(i.dataset.prio,i.value));

@@ -197,3 +197,21 @@ Toda task criada pelo agente PODE trazer `questions` (no brief embutido):
   responder como agente nas suas tasks, use `system_design_task_update`
   com `questions` completo (ids preservados).
 - Nunca invente resposta pelo usuário: sem resposta dele, sem avanço.
+
+## Task dirigida a você = tutorial
+
+Quando a task tem `owner=user` (ou vai terminar com você executando —
+`afterAnswer` responder→executado/testes), a `desc` NÃO é resumo: é um
+TUTORIAL de execução, com:
+
+1. Objetivo em 1 frase.
+2. Passos numerados (1., 2., 3…) concretos, um por linha.
+3. Links clicáveis no formato `[texto](https://…)` — doc oficial,
+   repo, ticket, arquivo relevante. Mínimo 1 link quando existir
+   documentação. Sem inventar URL: use fonte real ou diga "sem doc".
+4. Critério de pronto (o que conta como feito) e o que responder nas
+   `questions` do formulário, se houver.
+
+A UI renderiza `desc` com os links clicáveis no botão **ver** da task
+(/modal de detalhe). Não encaixote o tutorial só no chat: ele vive na
+`desc`.
