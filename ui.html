@@ -60,24 +60,44 @@ iframe.preview{width:100%;height:220px;border:1px solid #2b3345;border-radius:6p
 #grapes-host{min-height:420px;background:#fff;border-radius:6px}
 .hint{font-size:.76rem;color:#8b93a7}
 .mono{font-family:ui-monospace,monospace}
-/* ===== baralho de propostas (estilo tinder) ===== */
-#deck-wrap{max-width:600px;margin:0 auto}
+/* ===== baralho de propostas (decisão rápida) ===== */
+#deck-wrap{max-width:760px;margin:0 auto}
 #deck-count{text-align:center;color:#8b93a7;font-size:.8rem;margin-bottom:.5rem}
 #deck{position:relative;min-height:360px;touch-action:pan-y}
-.tcard{position:absolute;inset:0;background:#10151f;border:1px solid #3b82f6;border-radius:14px;padding:1.1rem;box-shadow:0 10px 34px rgba(0,0,0,.55);will-change:transform;user-select:none;-webkit-user-select:none;cursor:grab;overflow:auto;max-height:70vh}
+.tcard{position:absolute;inset:0;background:#10151f;border:1px solid #3b82f6;border-radius:14px;padding:1.1rem 1.2rem;box-shadow:0 10px 34px rgba(0,0,0,.55);will-change:transform;user-select:none;-webkit-user-select:none;cursor:grab;overflow:auto;max-height:72vh;display:flex;flex-direction:column;gap:.45rem}
 .tcard:active{cursor:grabbing}
-.tcard .stamp{position:absolute;top:.9rem;font-size:.95rem;font-weight:800;padding:.2rem .6rem;border:3px solid;border-radius:8px;opacity:0;pointer-events:none}
+.tcard .stamp{position:absolute;top:.9rem;font-size:.95rem;font-weight:800;padding:.2rem .6rem;border:3px solid;border-radius:8px;opacity:0;pointer-events:none;z-index:2}
 .tcard .stamp.yes{left:.9rem;color:#7ddf9b;border-color:#7ddf9b;transform:rotate(-12deg)}
 .tcard .stamp.no{right:.9rem;color:#f87171;border-color:#f87171;transform:rotate(12deg)}
-.tglance{font-size:1.05rem;font-weight:700;margin:.5rem 2rem .4rem 0;line-height:1.4}
-.twhy{color:#c7ccd9;font-size:.86rem;margin-bottom:.3rem}
-.tvisual{margin:.7rem 0;padding:.7rem;background:#0d1220;border:1px solid #2b3345;border-radius:8px}
-.ttech{margin-top:.5rem}
-.deck-btns{display:flex;gap:.8rem;justify-content:center;margin-top:.8rem}
-.deck-btns button{font-size:1.05rem;padding:.65rem 1.2rem;border-radius:999px;min-width:64px}
+.tglance{font-size:1.18rem;font-weight:700;margin:.35rem 0 .15rem;line-height:1.35;color:#f3f6ff}
+.twhy{color:#c7ccd9;font-size:.9rem;margin:.1rem 0 .35rem;line-height:1.45}
+.tsec{margin:.35rem 0 .15rem;font-size:.72rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#93c5fd}
+.tchanges{list-style:none;margin:.15rem 0 .4rem;padding:0;display:grid;gap:.28rem}
+.tchanges li{position:relative;padding:.4rem .55rem .4rem 1.5rem;background:#0d1220;border:1px solid #2b3345;border-radius:7px;font-size:.84rem;color:#d7dceb;line-height:1.4}
+.tchanges li::before{content:'▸';position:absolute;left:.55rem;color:#7ddf9b;font-weight:700}
+.tchanges li.mut{opacity:.92}
+.tchanges .more{color:#8b93a7;font-size:.78rem;padding:.2rem .3rem}
+.tvisual{margin:.45rem 0;padding:.7rem;background:#0d1220;border:1px solid #2b3345;border-radius:8px}
+.tvisual:empty{display:none}
+.tmeta{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center;margin-top:.15rem}
+.ttech{margin-top:.35rem}
+.ttech summary{font-size:.78rem}
+.deck-btns{display:flex;gap:.7rem;justify-content:center;margin-top:.75rem;flex-wrap:wrap}
+.deck-btns button{font-size:.92rem;font-weight:700;padding:.7rem 1.15rem;border-radius:999px;min-width:118px;letter-spacing:.02em}
 #btn-no{background:transparent;border:2px solid #7f1d1d;color:#f87171}
 #btn-skip{background:transparent;border:2px solid #3b4458;color:#c7ccd9}
 #btn-yes{background:#14532d;border:2px solid #1f7a33;color:#fff}
+#btn-no:hover{background:#3f1d1d}
+#btn-yes:hover{background:#166534}
+.deck-hint{text-align:center;color:#8b93a7;font-size:.75rem;margin-top:.35rem}
+.deck-queue{margin-top:.85rem;border-top:1px dashed #2b3345;padding-top:.55rem}
+.deck-queue h4{margin:0 0 .4rem;font-size:.78rem;color:#93c5fd;font-weight:600}
+.deck-queue ol{list-style:none;margin:0;padding:0;display:grid;gap:.28rem;max-height:220px;overflow:auto}
+.deck-queue li{display:flex;gap:.45rem;align-items:flex-start}
+.deck-queue button.qrow{flex:1;text-align:left;background:#0d1220;border:1px solid #2b3345;border-radius:6px;color:#c7ccd9;padding:.4rem .55rem;font-size:.78rem;line-height:1.35;cursor:pointer}
+.deck-queue button.qrow:hover{border-color:#3b82f6;color:#e6e6e6}
+.deck-queue button.qrow.cur{border-color:#3b82f6;background:#12203a;color:#fff}
+.deck-queue .qkind{display:inline-block;background:#1a1a2e;border:1px solid #4a4a6a;border-radius:8px;color:#a0a0c0;font-size:.68rem;padding:0 .35rem;margin-right:.3rem}
 /* ===== previa de pagina como o usuario ve ===== */
 .pv-hint{font-size:.78rem;color:#8b93a7;margin:.4rem 0 .6rem}
 .pv-card{border:1px solid #2b3345;border-radius:10px;padding:.8rem;margin-bottom:.6rem;background:#0d1220;cursor:pointer;position:relative}
@@ -135,8 +155,8 @@ iframe.preview{width:100%;height:220px;border:1px solid #2b3345;border-radius:6p
 
 <section id="tab-proposals" class="tabpanel" style="display:none">
 <div class="card" id="inbox-card">
-  <h2>Avaliar propostas <span class="hint">(arraste para a direita = aprovar · esquerda = rejeitar)</span></h2>
-  <div id="inbox"><span class="muted">Selecione um projeto.</span></div>
+  <h2>Avaliar propostas <span class="hint">— leia o resumo, decida: botões, teclas (A aprovar · R rejeitar · S pular) ou arraste o card</span></h2>
+  <div id="inbox"><span class="muted">Carregando propostas…</span></div>
 </div>
 </section>
 
@@ -243,7 +263,20 @@ function msg(t, ok){ const e=$('msg'); e.textContent=t||''; e.className=ok?'ok':
 function openModal(html){ $('modal-box').innerHTML=html; $('modal').classList.add('open'); }
 function closeModal(){ $('modal').classList.remove('open'); $('modal-box').innerHTML=''; }
 $('modal').addEventListener('click', e=>{ if(e.target.id==='modal') closeModal(); });
-document.addEventListener('keydown', e=>{ if(e.key==='Escape'&&!$('grapes-host')) closeModal(); });
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape'&&!$('grapes-host')){ closeModal(); return; }
+  if(e.metaKey||e.ctrlKey||e.altKey) return;
+  const ae=document.activeElement;
+  if(ae&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'||ae.tagName==='SELECT'||ae.isContentEditable)) return;
+  if(document.querySelector('.modal.open')) return;
+  const tab=document.querySelector('#tabs .tab.active');
+  if(!tab||tab.dataset.tab!=='proposals') return;
+  if(!$('tcard')) return;
+  const k=String(e.key||'').toLowerCase();
+  if(k==='a'||k==='arrowright'){ e.preventDefault(); const b=$('btn-yes'); if(b) b.click(); }
+  else if(k==='r'||k==='arrowleft'){ e.preventDefault(); const b=$('btn-no'); if(b) b.click(); }
+  else if(k==='s'||k===' '){ e.preventDefault(); const b=$('btn-skip'); if(b) b.click(); }
+});
 
 const FILES = {concept:'concept.json',sprint:'sprint.json',pages:'pages.json',tables:'tables.json',proposals:'proposals.json'};
 let HOME='/home/guipvi', PROJECT='', CACHE={};
@@ -319,43 +352,141 @@ function targetLabel(p){
 /* ============ baralho de propostas (estilo tinder) ============ */
 let DECK_IDX=0, DECK_SKIP=new Set();
 /* Resumo de designer: o essencial em uma fracao de segundo */
+function resolveName(p, payloadNames){
+  const t=p.targetId?findTarget(p.tab,p.targetKind,p.targetId):null;
+  const fromTgt=t?(t.title||t.name||t.label||''):'';
+  for(const k of payloadNames||[]){ const v=(p.payload||{})[k]; if(v!==undefined&&v!==null&&String(v).trim()) return String(v).trim(); }
+  return fromTgt;
+}
 function describeProposal(p){
   const pl=p.payload||{};
   const first=(...ks)=>{ for(const k of ks){ const v=pl[k]; if(v!==undefined&&v!==null&&String(v).trim()!=='') return String(v); } return ''; };
   const act=p.action||'', kind=p.targetKind||'';
-  if(kind==='concept-vision') return {glance:'Visão do sistema atualizada', why:p.reason||'Direção do produto: objetivo, público, escopo e não-objetivos.'};
-  if(kind==='concept-element'){
-    const t=first('title','name');
-    const tk=Array.isArray(pl.tasks)?pl.tasks.filter(x=>x&&x.title):[];
-    const tkTxt=tk.length?` 📋 ${tk.length} tarefa(s) incluída(s): ${tk.map(x=>x.title+(x.status&&x.status!=='backlog'?' ('+x.status+')':'')).join('; ').slice(0,140)}`:'';
-    if(act==='create') return {glance:`Novo elemento: ${t||'(sem título)'}`, why:`${pl.kind||'elemento'} · ${first('description','desc','ref')||p.reason||''}${tkTxt}`.slice(0,320)};
-    if(act==='update'){ const tkU=Array.isArray(pl.tasks)?pl.tasks.filter(x=>x&&x.title):[]; return {glance:`Ajustar elemento: ${t||p.targetId||''}`, why:((p.reason||'Mudança proposta pelo chat.')+(tkU.length?` 📋 tarefas: ${tkU.map(x=>x.title).join('; ').slice(0,120)}`:'')).slice(0,320)}; }
-    return {glance:`Remover elemento: ${t||p.targetId||''}`, why:(p.reason||'').slice(0,220)};
+  const nameKeys=kind==='page'?['name']:kind==='table'?['name']:kind==='concept-element'?['title','name']:kind==='page-element'?['label']:kind==='table-column'?['name']:['title','name','label'];
+  const nm=resolveName(p, nameKeys);
+  const route=pl.route||(kind==='page'&&p.targetId?((findTarget(p.tab,'page',p.targetId)||{}).route||''):'');
+  const changes=[];
+  const push=(s)=>{ if(s&&changes.length<16) changes.push(String(s)); };
+  if(kind==='concept-vision'){
+    if('objective' in pl) push('Objetivo: '+String(pl.objective||'—').slice(0,160));
+    if('audience' in pl) push('Público: '+String(pl.audience||'—').slice(0,140));
+    if('scope' in pl) push('Escopo: '+String(pl.scope||'—').slice(0,140));
+    if('nonGoals' in pl) push('Não-objetivos: '+String(pl.nonGoals||'—').slice(0,140));
+    if(!changes.length) push('Campos da visão do sistema serão substituídos pelos do payload.');
+  } else if(kind==='page'){
+    if('name' in pl) push('Nome → '+first('name'));
+    if('route' in pl) push('Rota → '+(first('route')||'(sem rota)'));
+    if('desc' in pl||'description' in pl) push('Descrição: '+(first('desc','description')||'—').slice(0,180));
+    if(Array.isArray(pl.elements)){
+      const els=pl.elements.filter(e=>e&&(e.label||e.type));
+      push(els.length+' elemento(s) de página serão adicionados/atualizados:');
+      els.slice(0,10).forEach(e=>push('· ['+(e.type||'?')+'] '+((e.label||e.content)||'').slice(0,120)));
+      if(els.length>10) push('… +'+(els.length-10)+' elementos');
+    }
+    if(Array.isArray(pl.tasks)&&pl.tasks.length) push(pl.tasks.length+' tarefa(s) implícita(s): '+pl.tasks.map(t=>t&&t.title).filter(Boolean).join('; ').slice(0,140));
+    if(!changes.length) push(p.reason||'Página será atualizada.');
+  } else if(kind==='page-element'){
+    if('type' in pl) push('Tipo: '+first('type'));
+    if('label' in pl) push('Rótulo: '+first('label'));
+    if('content' in pl) push('Conteúdo: '+first('content').slice(0,180));
+    if('order' in pl) push('Ordem: '+first('order'));
+    if(!changes.length) push('Bloco da página será criado/atualizado com os campos do payload.');
+  } else if(kind==='table'){
+    if('name' in pl) push('Nome → '+first('name'));
+    if('desc' in pl) push('Descrição: '+first('desc').slice(0,160));
+    if(Array.isArray(pl.columns)){
+      push(pl.columns.length+' coluna(s):');
+      pl.columns.slice(0,12).forEach(c=>push('· '+(typeof c==='string'?c:(c.name||'?'))+(c&&c.type?' ('+c.type+')':'')));
+    }
+    if(Array.isArray(pl.tasks)&&pl.tasks.length) push(pl.tasks.length+' tarefa(s) implícita(s)');
+    if(!changes.length) push(p.reason||'Tabela será atualizada.');
+  } else if(kind==='table-column'){
+    push('Coluna '+(first('name')||p.targetId||'(nova)')+(first('type')?' · '+first('type'):''));
+    if('pk' in pl) push(pl.pk?'PK':'sem PK');
+    if('nullable' in pl) push(pl.nullable?'aceita nulo':'NOT NULL');
+    if('fk' in pl&&pl.fk) push('FK → '+(pl.fk.table||'')+'.'+(pl.fk.column||''));
+    if('desc' in pl) push('Descrição: '+(first('desc')||'—').slice(0,140));
+  } else if(kind==='relation'){
+    push('Ligar '+(first('fromTable','from')||'?')+'.'+(first('fromColumn')||'?')+' → '+(first('toTable','to')||'?')+'.'+(first('toColumn')||'?'));
+    push('Cardinalidade: '+(first('cardinality')||'1:N'));
+    if(first('desc')) push(first('desc').slice(0,160));
+  } else if(kind==='concept-element'){
+    if('title' in pl||'name' in pl) push('Título → '+nm);
+    if('kind' in pl) push('Tipo → '+first('kind'));
+    if('description' in pl||'desc' in pl) push('Descrição: '+(first('description','desc')||'—').slice(0,180));
+    if('details' in pl) push('Detalhes: '+first('details').slice(0,180));
+    if(Array.isArray(pl.tasks)&&pl.tasks.length){
+      push(pl.tasks.length+' tarefa(s) incluída(s):');
+      pl.tasks.filter(t=>t&&t.title).slice(0,8).forEach(t=>push('· '+t.title+(t.status&&t.status!=='backlog'?' ('+t.status+')':'')));
+    }
+    if(act==='delete') push('Elemento será removido.');
+    if(!changes.length) push(p.reason||'Campos do elemento serão atualizados.');
+  } else if(kind==='sprint-task'){
+    if('title' in pl) push('Título → '+first('title'));
+    if('status' in pl) push('Status → '+first('status'));
+    if('priority' in pl) push('Prioridade → '+first('priority'));
+    if('assignee' in pl) push('Responsável → '+(first('assignee')||'(livre)'));
+    if('desc' in pl) push('Descrição: '+first('desc').slice(0,160));
+    if(act==='delete') push('Tarefa será removida.');
+    if(!changes.length) push(p.reason||'Tarefa será ajustada.');
+  } else if(kind==='page-comment'){
+    push('Comentário: '+first('text').slice(0,200));
+  } else {
+    Object.keys(pl).slice(0,8).forEach(k=>{ const v=pl[k]; push(k+': '+(typeof v==='object'?JSON.stringify(v).slice(0,120):String(v).slice(0,120))); });
+    if(!changes.length) push(act+' '+kind+(p.reason?': '+p.reason:''));
   }
-  if(kind==='sprint-task'){
-    const t=first('title');
-    if(act==='move') return {glance:`Mover tarefa para ${first('status')||'?'}: ${t||p.targetId||''}`, why:(p.reason||'').slice(0,220)};
-    if(act==='create') return {glance:`Nova tarefa: ${t||'(sem título)'}`, why:`${first('desc','description')||p.reason||''}`.slice(0,220)};
-    return {glance:`${act==='delete'?'Remover':'Ajustar'} tarefa: ${t||p.targetId||''}`, why:(p.reason||'').slice(0,220)};
+  let glance='', why='';
+  if(kind==='concept-vision'){ glance='Visão do sistema atualizada'; why=p.reason||'Direção do produto: objetivo, público, escopo e não-objetivos.'; }
+  else if(kind==='page'){
+    glance=(act==='create'?'Nova página':act==='delete'?'Remover página':'Ajustar página')+': '+(nm||p.targetId||'(sem nome)')+(route?' · '+route:'');
+    why=first('desc','description')||p.reason||'';
   }
-  if(kind==='page') return {glance:`${act==='create'?'Nova página':act==='delete'?'Remover página':'Ajustar página'}: ${first('name')||p.targetId||''}${pl.route?' ('+pl.route+')':''}`, why:`${first('desc','description')||p.reason||''}${tasksTxt(pl)}`.slice(0,320)};
-  if(kind==='page-element') return {glance:`Novo bloco [${pl.type||'?'}]: ${first('label')||''}`, why:`${first('content')||p.reason||''}`.slice(0,220)};
-  if(kind==='page-comment') return {glance:`Comentário do chat: “${first('text').slice(0,90)}”`, why:(p.reason||'Opinião do agente sobre o design.').slice(0,220)};
-  if(kind==='table') return {glance:`${act==='create'?'Nova tabela':act==='delete'?'Remover tabela':'Ajustar tabela'}: ${first('name')||p.targetId||''}`, why:`${Array.isArray(pl.columns)?pl.columns.length+' colunas · ':''}${first('desc')||p.reason||''}${tasksTxt(pl)}`.slice(0,320)};
-  if(kind==='table-column') return {glance:`Nova coluna: ${first('name')||''}${pl.type?' ('+pl.type+')':''}`, why:(p.reason||'').slice(0,220)};
-  if(kind==='relation') return {glance:`Ligar ${first('fromTable','from')}.${first('fromColumn')} → ${first('toTable','to')}.${first('toColumn')}`, why:`cardinalidade ${pl.cardinality||'1:N'}${p.reason?' · '+p.reason:''}`.slice(0,220)};
-  return {glance:`${act} ${kind}`, why:(p.reason||'').slice(0,220)};
+  else if(kind==='concept-element'){
+    glance=(act==='create'?'Novo elemento':act==='delete'?'Remover elemento':'Ajustar elemento')+': '+(nm||p.targetId||'(sem título)');
+    why=first('description','desc','ref')||p.reason||'';
+  }
+  else if(kind==='table'){
+    glance=(act==='create'?'Nova tabela':act==='delete'?'Remover tabela':'Ajustar tabela')+': '+(nm||p.targetId||'');
+    why=first('desc')||p.reason||'';
+  }
+  else if(kind==='relation'){ glance='Relação: '+(first('fromTable','from')||'?')+' → '+(first('toTable','to')||'?'); why=p.reason||first('desc')||''; }
+  else if(kind==='sprint-task'){
+    glance=(act==='move'?'Mover tarefa → '+first('status'):act==='create'?'Nova tarefa':act==='delete'?'Remover tarefa':'Ajustar tarefa')+': '+(first('title')||p.targetId||'');
+    why=first('desc','description')||p.reason||'';
+  }
+  else if(kind==='page-element'){ glance='Bloco de página ['+(first('type')||'?')+']: '+(first('label')||p.targetId||''); why=first('content')||p.reason||''; }
+  else if(kind==='table-column'){ glance='Coluna: '+(first('name')||p.targetId||'')+(first('type')?' · '+first('type'):''); why=first('desc')||p.reason||''; }
+  else if(kind==='page-comment'){ glance='Comentário na página'; why=first('text').slice(0,200)||p.reason||''; }
+  else { glance=(act?act+' ':'')+kind+(nm?' · '+nm:''); why=p.reason||''; }
+  return {glance:String(glance), why:String(why).slice(0,320), changes};
 }
 /* Destaque visual quando a proposta tem algo para mostrar */
 function visualFor(p){
   const pl=p.payload||{};
   if(pl.snapshotHtml) return `<div class="tvisual"><iframe class="preview" sandbox="" srcdoc="${esc(pl.snapshotHtml.slice(0,8000))}"></iframe></div>`;
   if(p.targetKind==='concept-element'&&(pl.kind==='interface'||pl.kind==='page'))
-    return `<div class="tvisual"><span class="tag">${esc(pl.kind)}</span> <strong style="font-size:1.2rem">${esc(pl.title||pl.name||'')}</strong><br><span class="muted">${esc((pl.description||pl.desc||'').slice(0,180))}</span></div>`;
+    return `<div class="tvisual"><span class="tag">${esc(pl.kind)}</span> <strong style="font-size:1.15rem">${esc(pl.title||pl.name||'')}</strong><br><span class="muted">${esc((pl.description||pl.desc||'').slice(0,180))}</span></div>`;
   if(p.targetKind==='table'&&Array.isArray(pl.columns)&&pl.columns.length)
-    return `<div class="tvisual">${pl.columns.slice(0,12).map(c=>`<span class="tag dim mono">${esc(typeof c==='string'?c:(c.name||''))}</span>`).join('')}${pl.columns.length>12?'<span class="muted">+'+(pl.columns.length-12)+'</span>':''}</div>`;
-  if(p.targetKind==='page') return `<div class="tvisual"><strong style="font-size:1.2rem">${esc(pl.name||'')}</strong><br><span class="mono muted">${esc(pl.route||'')}</span></div>`;
+    return `<div class="tvisual">${pl.columns.slice(0,12).map(c=>`<span class="tag dim mono">${esc(typeof c==='string'?c:(c.name||''))}</span>`).join('')}${pl.columns.length>12?`<span class="muted">+${pl.columns.length-12}</span>`:''}</div>`;
+  if(p.targetKind==='page'){
+    const name=pl.name||resolveName(p,['name']);
+    const route=pl.route||'';
+    if(!name&&!route) return '';
+    return `<div class="tvisual"><strong style="font-size:1.1rem">${esc(name||'')}</strong>${route?`<br><span class="mono muted">${esc(route)}</span>`:''}</div>`;
+  }
   return '';
+}
+function changesHtml(changes){
+  if(!changes||!changes.length) return '';
+  const head=changes[0], rest=changes.slice(1);
+  return `<div class="tsec">O que muda</div><ul class="tchanges"><li>${esc(head)}</li>${rest.slice(0,12).map(c=>`<li>${esc(c)}</li>`).join('')}${rest.length>12?`<li class="more">… +${rest.length-12} itens</li>`:''}</ul>`;
+}
+function queueHtml(list, curId){
+  if(list.length<2) return '';
+  return `<div class="deck-queue"><h4>Fila (${list.length}) — clique para navegar</h4><ol>${list.map(q=>{
+    const d=describeProposal(q);
+    return `<li><button type="button" class="qrow${q.id===curId?' cur':''}" data-qid="${esc(q.id)}"><span class="qkind">${esc(q.action||'')} ${esc(q.targetKind||'')}</span>${esc(d.glance)}</button></li>`;
+  }).join('')}</ol></div>`;
 }
 function tasksTxt(pl){ const tk=Array.isArray((pl||{}).tasks)?pl.tasks.filter(x=>x&&x.title):[]; return tk.length?` 📋 ${tk.length} tarefa(s) incluída(s): ${tk.map(x=>x.title+(x.status&&x.status!=='backlog'?' ('+x.status+')':'')).join('; ').slice(0,140)}`:''; }
 function renderInbox(){
@@ -370,27 +501,36 @@ function renderInbox(){
   if(!list.length){ host.innerHTML='<span class="muted">Nenhuma proposta pendente. Quando o chat quiser mudar algo, aparece aqui para você aprovar.</span>'; return; }
   const p=list[DECK_IDX];
   const d=describeProposal(p);
+  const nTasks=Array.isArray(p.payload&&p.payload.tasks)?p.payload.tasks.filter(t=>t&&t.title).length:0;
   host.innerHTML=`<div id="deck-wrap"><div id="deck-count">${DECK_IDX+1} de ${list.length} pendentes</div>
   <div id="deck"><div class="tcard" id="tcard">
     <span class="stamp yes" id="stamp-yes">APROVAR</span><span class="stamp no" id="stamp-no">REJEITAR</span>
-    <div><span class="tag dim">${esc(p.action||'')}</span> <span class="tag">${esc(p.tab||'')} · ${esc(p.targetKind||'')}</span></div>
+    <div class="tmeta"><span class="tag dim">${esc(p.action||'')}</span> <span class="tag">${esc(p.tab||'')} · ${esc(p.targetKind||'')}</span>${nTasks?`<span class="tag ok">📋 ${nTasks} tarefa(s)</span>`:''}</div>
     <div class="tglance">${esc(d.glance)}</div>
     ${d.why?`<div class="twhy">${esc(d.why)}</div>`:''}
+    ${changesHtml(d.changes)}
     ${visualFor(p)}
-    <details class="ttech"><summary>Detalhes técnicos</summary>
+    <details class="ttech"><summary>Detalhes técnicos (JSON)</summary>
       <div class="muted mono" style="font-size:.74rem">id ${esc(p.id)} · ${esc(fmtDate(p.createdAt))}</div>
       <div class="muted" style="margin:.3rem 0">Motivo: ${esc(p.reason||'—')}</div>
       <pre class="mono" style="white-space:pre-wrap;font-size:.74rem;background:#0b0e14;border:1px solid #2b3345;border-radius:6px;padding:.5rem;max-height:220px;overflow:auto">${esc(JSON.stringify(p.payload||{},null,2).slice(0,4000))}</pre>
     </details>
   </div></div>
   <div class="deck-btns">
-    <button id="btn-no" title="Rejeitar">✕</button>
-    <button id="btn-skip" title="Pular">⏭</button>
-    <button id="btn-yes" title="Aprovar">✓</button>
-  </div></div>`;
+    <button id="btn-no" title="Rejeitar (tecla R)">✕ Rejeitar</button>
+    <button id="btn-skip" title="Pular (tecla S)" class="ghost">⏭ Pular</button>
+    <button id="btn-yes" title="Aprovar (tecla A)">✓ Aprovar</button>
+  </div>
+  <div class="deck-hint">Arraste o card ou use os botões · teclado: A aprovar, R rejeitar, S pular</div>
+  ${queueHtml(list,p.id)}
+  </div>`;
   $('btn-yes').onclick=()=>decideProposal(p.id,true);
   $('btn-no').onclick=()=>decideProposal(p.id,false);
   $('btn-skip').onclick=()=>{ DECK_SKIP.add(p.id); DECK_IDX++; renderInbox(); };
+  host.querySelectorAll('[data-qid]').forEach(b=>b.onclick=()=>{
+    const i=list.findIndex(x=>x.id===b.dataset.qid);
+    if(i>=0){ DECK_IDX=i; renderInbox(); }
+  });
   bindSwipe($('tcard'),p.id);
 }
 function bindSwipe(card,id){
