@@ -243,15 +243,96 @@ def list_projects(root=None):
 
 # ------------------------------------------------------------------ conceitos
 
+QUESTION_TYPES = ("text", "choice", "yesno")
+AFTER_ANSWER = ("executado", "solicitacao_testes")
+
+
+def validate_question(item, idx=0):
+    """Pergunta do formulario de execucao: {id?, question, type?, options?, answer?}."""
+    if isinstance(item, str):
+        item = {"question": item}
+    if not isinstance(item, dict):
+        raise ValueError("pergunta invalida")
+    qtype = item.get("type") or "text"
+    if qtype not in QUESTION_TYPES:
+        raise ValueError(f"tipo de pergunta invalido: {qtype!r}")
+    options = []
+    if qtype == "choice":
+        raw = item.get("options") or []
+        if not isinstance(raw, list) or not raw:
+            raise ValueError("pergunta choice exige options")
+        options = [_check_str(x, "option", 200) for x in raw][:10]
+    ans = item.get("answer")
+    if ans is not None:
+        ans = _check_str(ans, "answer", 2000, required=False) or ""
+        if qtype == "choice" and ans and ans not in options:
+            raise ValueError("resposta fora das opcoes")
+    qid = item.get("id") or f"q{idx + 1}"
+    out = {"id": validate_entity_id(str(qid), "question.id"),
+           "question": _check_str(item.get("question"), "question", 500),
+           "type": qtype, "options": options, "answer": ans or ""}
+    for k in ("answeredBy", "answeredAt"):
+        if item.get(k):
+            out[k] = item[k]
+    return out
+
+
+def _stamp_answers(old_list, new_list, actor):
+    """Carimba autoria/hora nas respostas recem-preenchidas."""
+    old_by_id = {q.get("id"): q for q in (old_list or []) if isinstance(q, dict)}
+    for q in new_list or []:
+        if not isinstance(q, dict):
+            continue
+        prev = old_by_id.get(q.get("id"), {})
+        if (q.get("answer") or "").strip() and not (prev.get("answer") or "").strip():
+            q["answeredBy"] = actor
+            q["answeredAt"] = utcnow()
+    return new_list
+
+
+def _maybe_auto_advance(task, actor):
+    """Formulario completo -> avanca (executado ou solicitacao_testes).
+
+    Compoe passos legais da matriz. Retorna o status final ou None.
+    """
+    qs = task.get("questions") or []
+    if not qs:
+        return None
+    if any(not (q.get("answer") or "").strip() for q in qs if isinstance(q, dict)):
+        return None
+    cur = task.get("status") or "backlog"
+    if cur not in ("backlog", "doing"):
+        return None
+    target = task.get("afterAnswer") or "executado"
+    if target not in AFTER_ANSWER:
+        target = "executado"
+    if target == "solicitacao_testes" and actor != "user":
+        target = "executado"
+    if target == "solicitacao_testes" and cur != "executado":
+        _check_move(actor, cur, "executado")
+        task["status"] = "executado"
+        task["owner"] = _auto_owner("executado")
+        cur = "executado"
+    _check_move(actor, cur, target)
+    task["status"] = target
+    task["owner"] = _auto_owner(target)
+    return target
+
+
 def validate_task_brief(item):
     """Uma tarefa implicada no conceito: {title, desc?, priority?}."""
     if not isinstance(item, dict):
         raise ValueError("tarefa implicada invalida")
+    raw_q = item.get("questions") or []
+    if not isinstance(raw_q, list):
+        raise ValueError("'questions' deve ser uma lista")
     return {
         "title": _check_str(item.get("title"), "task.title", MAX_TITLE),
         "desc": _check_str(item.get("desc"), "task.desc", MAX_DESC, required=False),
         "priority": _check_priority(item.get("priority"), "task.priority") if item.get("priority") is not None else 5,
         "status": _check_enum(item.get("status"), "task.status", STATUSES, required=False, default="backlog"),
+        "afterAnswer": item.get("afterAnswer") if item.get("afterAnswer") in AFTER_ANSWER else "executado",
+        "questions": [validate_question(x, i) for i, x in enumerate(raw_q)],
     }
 
 
@@ -327,6 +408,9 @@ def validate_task(payload, partial=False):
         "owner": payload.get("owner") if payload.get("owner") in OWNERS else None,
         "status": _check_enum(payload.get("status"), "status", STATUSES, required=False, default="backlog"),
         "assignee": _check_str(payload.get("assignee"), "assignee", 120, required=False),
+        "afterAnswer": payload.get("afterAnswer") if payload.get("afterAnswer") in AFTER_ANSWER else "executado",
+        "questions": ([validate_question(x, i) for i, x in enumerate(payload.get("questions"))]
+                      if "questions" in (payload or {}) else []),
     }
 
 
@@ -343,6 +427,8 @@ def apply_sprint(data, target_id, action, payload, actor):
             **clean,
             "createdBy": actor, "createdAt": now, "updatedBy": actor, "updatedAt": now,
         })
+        _stamp_answers([], tasks[-1].get("questions"), actor)
+        _maybe_auto_advance(tasks[-1], actor)
         return tasks[-1]
     item = next((t for t in tasks if t.get("id") == target_id), None)
     if item is None:
@@ -353,12 +439,16 @@ def apply_sprint(data, target_id, action, payload, actor):
             _check_move(actor, item.get("status") or "backlog", nxt)
             item["status"] = nxt
             item["owner"] = _auto_owner(nxt)
+        old_q = [dict(q) for q in (item.get("questions") or []) if isinstance(q, dict)]
         clean = validate_task(payload or {}, partial=True)
         for key, value in clean.items():
             if key in (payload or {}) and key not in ("status", "owner"):
                 item[key] = value
         if "owner" in (payload or {}) and payload.get("owner") in OWNERS:
             item["owner"] = payload.get("owner")
+        if "questions" in (payload or {}) and "status" not in (payload or {}):
+            _stamp_answers(old_q, item.get("questions"), actor)
+            _maybe_auto_advance(item, actor)
         item["updatedBy"] = actor
         item["updatedAt"] = utcnow()
         return item
@@ -910,6 +1000,8 @@ def _spawn_implied_tasks(root, project, element, actor, origin=None):
             "priority": _check_priority(item.get("priority"), "priority") if item.get("priority") is not None else 5,
             "owner": _auto_owner(st),
             "status": st,
+            "afterAnswer": item.get("afterAnswer") if item.get("afterAnswer") in AFTER_ANSWER else "executado",
+            "questions": [dict(q) for q in (item.get("questions") or []) if isinstance(q, dict)],
             "origin": {"tab": origin.get("tab"), "kind": origin.get("kind"),
                        "id": origin.get("id"), "title": origin.get("title")},
             "createdBy": f"{actor}:{origin.get('kind') or 'origem'}",
@@ -1001,12 +1093,16 @@ def agent_task_update(root, project, task_id, payload):
         _check_move("agent", item.get("status") or "backlog", nxt)
         item["status"] = nxt
         item["owner"] = _auto_owner(nxt)
+    old_q = [dict(q) for q in (item.get("questions") or []) if isinstance(q, dict)]
     clean = validate_task(payload, partial=True)
     for key, value in clean.items():
         if key in payload and key not in ("status", "owner"):
             item[key] = value
     if payload.get("owner") in OWNERS:
         item["owner"] = payload.get("owner")
+    if "questions" in payload and "status" not in payload:
+        _stamp_answers(old_q, item.get("questions"), "agent")
+        _maybe_auto_advance(item, "agent")
     item["updatedBy"] = "agent"
     item["updatedAt"] = utcnow()
     save_data(root, project, SPRINT_FILE, data)

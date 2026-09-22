@@ -345,3 +345,53 @@ def test_agent_only_own_tasks(root):
                            {"title": "U"})
     out = store.agent_task_update(root, PROJ, t2["id"], {"desc": "andamento", "priority": 8})
     assert out["desc"] == "andamento" and out["priority"] == 8
+
+
+def test_questions_autoadvance_user(root):
+    t = store.user_action(root, PROJ, "sprint", "sprint-task", None, "create",
+                          {"title": "Deploy", "questions": ["Qual ambiente?"]})
+    assert t["questions"][0]["id"] == "q1" and t["status"] == "backlog"
+    store.user_action(root, PROJ, "sprint", "sprint-task", t["id"], "update",
+                      {"questions": [{"id": "q1", "question": "Qual ambiente?",
+                                      "answer": "VPS"}]})
+    got = store.load_data(root, PROJ, store.SPRINT_FILE)["tasks"][0]
+    assert got["status"] == "executado" and got["owner"] == "user"
+    assert got["questions"][0]["answeredBy"] == "user"
+
+
+def test_questions_solicitacao_composed(root):
+    t = store.user_action(root, PROJ, "sprint", "sprint-task", None, "create",
+                          {"title": "Checkout", "afterAnswer": "solicitacao_testes",
+                           "questions": [{"question": "Validado?"}]})
+    store.user_action(root, PROJ, "sprint", "sprint-task", t["id"], "update",
+                      {"questions": [{"id": t["questions"][0]["id"],
+                                      "question": "Validado?", "answer": "sim"}]})
+    got = store.load_data(root, PROJ, store.SPRINT_FILE)["tasks"][0]
+    assert got["status"] == "solicitacao_testes" and got["owner"] == "agent"
+
+
+def test_agent_answers_stops_at_executado(root):
+    t = store.user_action(root, PROJ, "sprint", "sprint-task", None, "create",
+                          {"title": "Job", "afterAnswer": "solicitacao_testes",
+                           "questions": [{"question": "Rodou?"}]})
+    out = store.agent_task_update(root, PROJ, t["id"],
+                                  {"questions": [{"id": t["questions"][0]["id"],
+                                                  "question": "Rodou?", "answer": "sim"}]})
+    assert out["status"] == "executado" and out["owner"] == "user"
+
+
+def test_incomplete_no_advance_bad_choice(root):
+    t = store.user_action(root, PROJ, "sprint", "sprint-task", None, "create",
+                          {"title": "P", "questions": [{"question": "A?"},
+                                                       {"question": "B?"}]})
+    store.user_action(root, PROJ, "sprint", "sprint-task", t["id"], "update",
+                      {"questions": [{"id": t["questions"][0]["id"], "question": "A?",
+                                      "answer": "x"},
+                                     {"id": t["questions"][1]["id"], "question": "B?"}]})
+    got = store.load_data(root, PROJ, store.SPRINT_FILE)["tasks"][0]
+    assert got["status"] == "backlog"
+    import pytest as _pt
+    with _pt.raises(ValueError, match="fora das opcoes"):
+        store.user_action(root, PROJ, "sprint", "sprint-task", t["id"], "update",
+                          {"questions": [{"id": "q9", "question": "C?", "type": "choice",
+                                          "options": ["a", "b"], "answer": "z"}]})

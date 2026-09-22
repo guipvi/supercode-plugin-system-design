@@ -178,3 +178,22 @@ mexer DIRETO nas tasks com `owner=agent` (título, desc, priority,
 owner, status com a matriz acima) — sem proposta, com o usuário vendo
 em tempo real. Tarefa com `owner=user`: NÃO edite, proponha
 (`system_design_propose`). Nunca use arquivos: só as tools.
+
+
+## Formulário de execução (perguntas que movem a task)
+
+Toda task criada pelo agente PODE trazer `questions` (no brief embutido):
+`[{question, type?, options?, answer?}]`, `type` em text|choice|yesno
+(choice exige `options`). E `afterAnswer`: `executado` (padrão) ou
+`solicitacao_testes`.
+
+- Na UI, perguntas sem resposta viram FORMULÁRIO no card. Responder
+  tudo move automaticamente: para `executado`, ou compondo
+  backlog→executado→`solicitacao_testes` (só o usuário; para você,
+  agente, para em `executado` e o dono vira o usuário).
+- Resposta parcial não move. Tipo `choice` fora das opções é rejeitado.
+- Para criar o formulário, embuta `questions` (e `afterAnswer` quando
+  for caso de teste) nas `tasks` do conceito/página/tabela. Para
+  responder como agente nas suas tasks, use `system_design_task_update`
+  com `questions` completo (ids preservados).
+- Nunca invente resposta pelo usuário: sem resposta dele, sem avanço.

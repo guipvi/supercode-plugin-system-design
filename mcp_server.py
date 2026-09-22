@@ -128,6 +128,9 @@ if mcp is not None:
         exigem `tasks` ([{title, desc?, priority?, status?}], ao menos 1);
         aprovar a origem cria as tasks na sprint com origem registrada.
         `status` pode vir `executado` com evidencia quando o repo ja executa.
+        FORMULARIO: briefs aceitam `questions` ([{question, type?, options?}])
+        e `afterAnswer` (executado|solicitacao_testes) — responder tudo move
+        sozinho.
         `sprint-task` em `create` e REJEITADO; `update`/`move`/`delete`
         valem para progresso e correcoes.
         Args:

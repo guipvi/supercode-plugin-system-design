@@ -433,9 +433,9 @@ function applyChange(tab,kind,tid,action,payload,actor){
   }
   if(tab==='sprint'){
     const d=CACHE[FILES.sprint];
-    if(action==='create'){ if(d.tasks.length>=1000) throw new Error('limite de tarefas'); const st=vEnum(payload.status,'status',ENUMS.status,'backlog'); const t={id:vId(payload.id||uid('t')),title:vStr(payload.title,'title',200),desc:vStr(payload.desc,'desc',5000,false),priority:(payload.priority==null||payload.priority===''?'5':vInt(payload.priority,'priority')),status:st,owner:(payload.owner==='user'||payload.owner==='agent')?payload.owner:autoOwner(st),assignee:vStr(payload.assignee,'assignee',120,false),createdBy:actor,createdAt:new Date().toISOString(),updatedBy:actor,updatedAt:new Date().toISOString()}; d.tasks.push(t); return t; }
+    if(action==='create'){ if(d.tasks.length>=1000) throw new Error('limite de tarefas'); const st=vEnum(payload.status,'status',ENUMS.status,'backlog'); const t={id:vId(payload.id||uid('t')),title:vStr(payload.title,'title',200),desc:vStr(payload.desc,'desc',5000,false),priority:(payload.priority==null||payload.priority===''?'5':vInt(payload.priority,'priority')),status:st,owner:(payload.owner==='user'||payload.owner==='agent')?payload.owner:autoOwner(st),afterAnswer:(payload.afterAnswer==='solicitacao_testes'||payload.afterAnswer==='executado')?payload.afterAnswer:'executado',questions:Array.isArray(payload.questions)?payload.questions.map((q,i)=>vQuestion(q,i)):[],assignee:vStr(payload.assignee,'assignee',120,false),createdBy:actor,createdAt:new Date().toISOString(),updatedBy:actor,updatedAt:new Date().toISOString()}; d.tasks.push(t); stampAnswersUI([],t.questions,actor); advanceTaskUI(t,actor); return t; }
     const t=d.tasks.find(x=>x.id===tid); if(!t) throw new Error('tarefa nao encontrada');
-    if(action==='update'||action==='move'){ if('status' in payload&&payload.status!==t.status){ checkMoveUI(actor,t.status,payload.status); t.status=vEnum(payload.status,'status',ENUMS.status); t.owner=autoOwner(t.status); } if('title' in payload) t.title=vStr(payload.title,'title',200); if('desc' in payload) t.desc=vStr(payload.desc,'desc',5000,false); if('priority' in payload) t.priority=vInt(payload.priority,'priority'); if('assignee' in payload) t.assignee=vStr(payload.assignee,'assignee',120,false); if('owner' in payload&&(payload.owner==='user'||payload.owner==='agent')) t.owner=payload.owner; t.updatedBy=actor; t.updatedAt=new Date().toISOString(); return t; }
+    if(action==='update'||action==='move'){ if('status' in payload&&payload.status!==t.status){ checkMoveUI(actor,t.status,payload.status); t.status=vEnum(payload.status,'status',ENUMS.status); t.owner=autoOwner(t.status); } if('afterAnswer' in payload&&(payload.afterAnswer==='solicitacao_testes'||payload.afterAnswer==='executado')) t.afterAnswer=payload.afterAnswer; if('questions' in payload){ const oldQ=(t.questions||[]).map(q=>({...q})); t.questions=Array.isArray(payload.questions)?payload.questions.map((q,i)=>vQuestion(q,i)):[]; stampAnswersUI(oldQ,t.questions,actor); if(!('status' in payload)) advanceTaskUI(t,actor); } if('title' in payload) t.title=vStr(payload.title,'title',200); if('desc' in payload) t.desc=vStr(payload.desc,'desc',5000,false); if('priority' in payload) t.priority=vInt(payload.priority,'priority'); if('assignee' in payload) t.assignee=vStr(payload.assignee,'assignee',120,false); if('owner' in payload&&(payload.owner==='user'||payload.owner==='agent')) t.owner=payload.owner; if('afterAnswer' in payload&&(payload.afterAnswer==='solicitacao_testes'||payload.afterAnswer==='executado')) t.afterAnswer=payload.afterAnswer; t.updatedBy=actor; t.updatedAt=new Date().toISOString(); return t; }
     if(action==='delete'){ d.tasks=d.tasks.filter(x=>x.id!==tid); return {deleted:tid}; }
     throw new Error('acao invalida');
   }
@@ -445,6 +445,7 @@ function applyChange(tab,kind,tid,action,payload,actor){
 }
 function vId(id){ if(!ID_RE.test(id)) throw new Error('id invalido'); return id; }
 let SPRINT_DIRTY=false;
+function vQuestion(q,i){ if(typeof q==='string') q={question:q}; if(!q||typeof q!=='object') throw new Error('pergunta invalida'); const qtype=q.type||'text'; if(!['text','choice','yesno'].includes(qtype)) throw new Error('tipo de pergunta invalido'); let options=[]; if(qtype==='choice'){ if(!Array.isArray(q.options)||!q.options.length) throw new Error('choice exige options'); options=q.options.map(o=>vStr(o,'option',200)).slice(0,10); } let ans=(q.answer==null?'':String(q.answer)); if(ans&&qtype==='choice'&&!options.includes(ans)) throw new Error('resposta fora das opcoes'); return {id:ID_RE.test(String(q.id||''))?String(q.id):('q'+((i||0)+1)),question:vStr(q.question,'question',500),type:qtype,options,answer:ans}; }
 function vTaskBrief(it){ if(!it||typeof it!=='object') throw new Error('tarefa implicada invalida'); return {title:vStr(it.title,'task.title',200),desc:vStr(it.desc,'task.desc',5000,false),priority:vEnum(it.priority,'task.priority',ENUMS.priority,'media'),status:vEnum(it.status,'task.status',ENUMS.status,'backlog')}; }
 function parseTaskLines(txt){ return String(txt||'').split('\n').map(s=>s.trim()).filter(Boolean).map(line=>{ const parts=line.split('|').map(s=>s.trim()); const st=(parts[2]||'backlog').toLowerCase(); return {title:parts[0],desc:parts[1]||'',status:['backlog','doing','done'].includes(st)?st:'backlog'}; }); }
 /* Aprovar conceito = aprovar o pacote: tarefas embutidas viram sprint (sem carta separada) */
@@ -506,6 +507,34 @@ function checkMoveUI(actor,cur,nxt){
   if(cur==='solicitacao_testes') throw new Error('solicitacao_testes: só o agente move, para aguardando_aprovacao');
   if(nxt==='solicitacao_testes'){ if(cur!=='executado') throw new Error('solicitacao_testes: só a partir de executado'); if(actor!=='user') throw new Error('solicitacao de testes: só o usuário solicita'); }
 }
+function qUnanswered(t){ return ((t.questions||[]).filter(q=>q&&!(q.answer||'').trim())); }
+function qFormHtml(t){
+  const open=qUnanswered(t);
+  if(!(t.questions||[]).length) return '';
+  if(!open.length){
+    return `<details><summary>Respostas (${t.questions.length})</summary>${t.questions.map(q=>`<div class="comment"><div class="who">${esc(q.question)}${q.answeredBy?' · '+esc(q.answeredBy):''}</div><div class="txt">${esc(q.answer||'—')}</div></div>`).join('')}</details>`;
+  }
+  const dest=(t.afterAnswer==='solicitacao_testes')?'solicitação de testes':'executado';
+  return `<div class="frm" style="margin-top:.4rem"><label class="muted">Para executar, responda (${open.length} pendente(s)):</label>${open.map(q=>{
+    if(q.type==='choice') return `<label>${esc(q.question)}<select data-qansw="${esc(t.id)}|${esc(q.id)}">${q.options.map(o=>`<option value="${esc(o)}" ${o===q.answer?'selected':''}>${esc(o)}</option>`).join('')}</select></label>`;
+    if(q.type==='yesno') return `<label>${esc(q.question)}<select data-qansw="${esc(t.id)}|${esc(q.id)}"><option value="">…</option><option>sim</option><option>não</option></select></label>`;
+    return `<label>${esc(q.question)}<input type="text" data-qansw="${esc(t.id)}|${esc(q.id)}" maxlength="2000" placeholder="resposta..."></label>`;
+  }).join('')}<button class="sm" data-qsend="${esc(t.id)}">Responder e marcar ${dest}</button></div>`;
+}
+function stampAnswersUI(oldQ,newQ,actor){ const byId={}; (oldQ||[]).forEach(q=>{byId[q.id]=q;}); (newQ||[]).forEach(q=>{ const prev=byId[q.id]||{}; if((q.answer||'').trim()&&!(prev.answer||'').trim()){ q.answeredBy=actor; q.answeredAt=new Date().toISOString(); } }); }
+function advanceTaskUI(t,actor){
+  const qs=t.questions||[];
+  if(!qs.length||qs.some(q=>!(q.answer||'').trim())) return null;
+  let cur=t.status||'backlog';
+  if(cur!=='backlog'&&cur!=='doing') return null;
+  let target=t.afterAnswer||'executado';
+  if(!['executado','solicitacao_testes'].includes(target)) target='executado';
+  if(target==='solicitacao_testes'&&actor!=='user') target='executado';
+  if(target==='solicitacao_testes'&&cur!=='executado'){ checkMoveUI(actor,cur,'executado'); t.status='executado'; t.owner=autoOwner('executado'); cur='executado'; }
+  checkMoveUI(actor,cur,target);
+  t.status=target; t.owner=autoOwner(target);
+  return target;
+}
 function originTag(t){ const o=t.origin||{}; if(!o.tab) return '<span class="tag dim">avulsa</span>'; const label=o.title||o.id||o.kind||''; return `<span class="tag" title="${esc(o.tab)} · ${esc(o.kind||'')} · ${esc(o.id||'')}">↩ ${esc(o.tab)}${label?': '+esc(String(label).slice(0,40)):''}</span>`; }
 function sprintFiltered(){
   const d=CACHE[FILES.sprint];
@@ -532,18 +561,34 @@ function renderSprint(){
   $('sprint-cols').innerHTML=Object.keys(STATUS_LABEL).map(st=>{
     const ts=list.filter(t=>t.status===st);
     return `<div class="col" data-col="${st}"><h3>${STATUS_LABEL[st]} <span class="tag dim">${ts.length}</span></h3>`+(ts.length?ts.map(t=>{const moves=USER_MOVES[t.status]||[];
-    return `<div class="task" draggable="true" data-task="${esc(t.id)}"><div class="t">${esc(t.title)} </div><div>${originTag(t)} ${ownerTag(t)}</div><div class="muted">${esc((t.desc||'').slice(0,120))}</div><div class="muted">prioridade: <input type="number" class="prio-num" min="1" max="10" value="${Number(t.priority)||5}" data-prio="${esc(t.id)}" title="1 baixo – 10 muito alta">${t.assignee?' · '+esc(t.assignee):''}</div><div class="row mv-arrows" style="margin-top:.35rem">${moves.map(m=>`<button class="ghost sm" data-mv="${esc(t.id)}|${m}">${STATUS_LABEL[m].slice(0,12)}${m==='backlog'?' ←':m==='doing'?' ⇄':' →'}</button>`).join('')}<button class="ghost sm" data-edit-t="${esc(t.id)}">editar</button><button class="danger sm" data-del-t="${esc(t.id)}">x</button></div><select class="mv-select" data-mvsel="${esc(t.id)}"><option value="">mover para…</option>${Object.keys(STATUS_LABEL).filter(m=>m!==t.status).map(m=>`<option value="${m}">${STATUS_LABEL[m]}</option>`).join('')}</select></div>`;}).join(''):'<span class="muted">vazio</span>')+`</div>`;
+    return `<div class="task" draggable="true" data-task="${esc(t.id)}"><div class="t">${esc(t.title)} </div><div>${originTag(t)} ${ownerTag(t)}</div><div class="muted">${esc((t.desc||'').slice(0,120))}</div><div class="muted">prioridade: <input type="number" class="prio-num" min="1" max="10" value="${Number(t.priority)||5}" data-prio="${esc(t.id)}" title="1 baixo – 10 muito alta">${t.assignee?' · '+esc(t.assignee):''}</div><div class="row mv-arrows" style="margin-top:.35rem">${moves.map(m=>`<button class="ghost sm" data-mv="${esc(t.id)}|${m}">${STATUS_LABEL[m].slice(0,12)}${m==='backlog'?' ←':m==='doing'?' ⇄':' →'}</button>`).join('')}<button class="ghost sm" data-edit-t="${esc(t.id)}">editar</button><button class="danger sm" data-del-t="${esc(t.id)}">x</button></div><select class="mv-select" data-mvsel="${esc(t.id)}"><option value="">mover para…</option>${Object.keys(STATUS_LABEL).filter(m=>m!==t.status).map(m=>`<option value="${m}">${STATUS_LABEL[m]}</option>`).join('')}</select>${qFormHtml(t)}</div>`;}).join(''):'<span class="muted">vazio</span>')+`</div>`;
   }).join('');
   $('sprint-cols').querySelectorAll('[data-mv]').forEach(b=>b.onclick=()=>moveTask(b.dataset.mv.split('|')[0],b.dataset.mv.split('|')[1]));
   $('sprint-cols').querySelectorAll('[data-mvsel]').forEach(s=>s.onchange=()=>{ if(s.value) moveTask(s.dataset.mvsel,s.value); s.value=''; });
   $('sprint-cols').querySelectorAll('[data-edit-t]').forEach(b=>b.onclick=()=>editTask(b.dataset.editT));
   $('sprint-cols').querySelectorAll('[data-del-t]').forEach(b=>b.onclick=()=>delTask(b.dataset.delT));
   $('sprint-cols').querySelectorAll('[data-prio]').forEach(i=>i.onchange=()=>setPrio(i.dataset.prio,i.value));
+  $('sprint-cols').querySelectorAll('[data-qsend]').forEach(b=>b.onclick=()=>sendAnswers(b.dataset.qsend));
   bindSprintDnd();
 }
 async function setPrio(id,val){
   try{ applyChange('sprint','sprint-task',id,'update',{priority:val},'user'); await saveTabFile('sprint'); renderAll(); msg('Prioridade atualizada: o agente lê na próxima passada.',true); }
   catch(e){ msg('Erro: '+e.message,false); renderAll(); }
+}
+async function sendAnswers(tid){
+  const host=$('sprint-cols');
+  const task=(CACHE[FILES.sprint].tasks||[]).find(x=>x.id===tid); if(!task) return;
+  const merged=(task.questions||[]).map(q=>{
+    const inp=host.querySelector(`[data-qansw="${tid}|${q.id}"]`);
+    return {...q, answer:inp?(inp.value||''):q.answer};
+  });
+  try{
+    applyChange('sprint','sprint-task',tid,'update',{questions:merged},'user');
+    await saveTabFile('sprint'); renderAll();
+    const cur=(CACHE[FILES.sprint].tasks||[]).find(x=>x.id===tid);
+    const pend=(cur.questions||[]).filter(q=>!(q.answer||'').trim()).length;
+    msg(pend?`Faltam ${pend} resposta(s).`:`Respostas salvas: tarefa em "${STATUS_LABEL[cur.status]||cur.status}".`,!pend);
+  }catch(e){ msg('Erro: '+e.message,false); }
 }
 function bindSprintDnd(){
   const cols=$('sprint-cols');
@@ -563,8 +608,8 @@ async function moveTask(id,st){
 }
 function editTask(id){
   const t=CACHE[FILES.sprint].tasks.find(x=>x.id===id); if(!t) return;
-  openModal(`<h2 style="color:#93c5fd;margin-bottom:.5rem">Editar tarefa</h2><div class="frm"><input type="text" id="m-title" value="${esc(t.title)}" maxlength="200"><label>Descrição<textarea id="m-desc" maxlength="5000">${esc(t.desc||'')}</textarea></label><div class="row"><label class="muted">prioridade 1–10<input type="number" id="m-prio" min="1" max="10" value="${Number(t.priority)||5}"></label><select id="m-status">${ENUMS.status.map(s=>`<option value="${s}" ${s===t.status?'selected':''}>${STATUS_LABEL[s]||s}</option>`).join('')}</select><select id="m-owner"><option value="agent" ${(t.owner||'agent')==='agent'?'selected':''}>🤖 agente</option><option value="user" ${t.owner==='user'?'selected':''}>🧑 você</option></select><input type="text" id="m-ass" value="${esc(t.assignee||'')}" placeholder="responsável" maxlength="120"></div></div><div class="row"><button id="m-save">Salvar</button><button class="ghost" onclick="closeModal()">Cancelar</button></div>`);
-  $('m-save').onclick=async()=>{ try{ applyChange('sprint','sprint-task',id,'update',{title:$('m-title').value,desc:$('m-desc').value,priority:parseInt($('m-prio').value,10),status:$('m-status').value,owner:$('m-owner').value,assignee:$('m-ass').value},'user'); await saveTabFile('sprint'); closeModal(); renderAll(); msg('Tarefa salva.',true);}catch(err){msg('Erro: '+err.message,false);} };
+  openModal(`<h2 style="color:#93c5fd;margin-bottom:.5rem">Editar tarefa</h2><div class="frm"><input type="text" id="m-title" value="${esc(t.title)}" maxlength="200"><label>Descrição<textarea id="m-desc" maxlength="5000">${esc(t.desc||'')}</textarea></label><div class="row"><label class="muted">prioridade 1–10<input type="number" id="m-prio" min="1" max="10" value="${Number(t.priority)||5}"></label><select id="m-status">${ENUMS.status.map(s=>`<option value="${s}" ${s===t.status?'selected':''}>${STATUS_LABEL[s]||s}</option>`).join('')}</select><select id="m-owner"><option value="agent" ${(t.owner||'agent')==='agent'?'selected':''}>🤖 agente</option><option value="user" ${t.owner==='user'?'selected':''}>🧑 você</option></select><select id="m-after"><option value="executado" ${(t.afterAnswer||'executado')==='executado'?'selected':''}>responder→executado</option><option value="solicitacao_testes" ${t.afterAnswer==='solicitacao_testes'?'selected':''}>responder→testes</option></select><input type="text" id="m-ass" value="${esc(t.assignee||'')}" placeholder="responsável" maxlength="120"></div></div><div class="row"><button id="m-save">Salvar</button><button class="ghost" onclick="closeModal()">Cancelar</button></div>`);
+  $('m-save').onclick=async()=>{ try{ applyChange('sprint','sprint-task',id,'update',{title:$('m-title').value,desc:$('m-desc').value,priority:parseInt($('m-prio').value,10),status:$('m-status').value,owner:$('m-owner').value,afterAnswer:$('m-after').value,assignee:$('m-ass').value},'user'); await saveTabFile('sprint'); closeModal(); renderAll(); msg('Tarefa salva.',true);}catch(err){msg('Erro: '+err.message,false);} };
 }
 async function delTask(id){ if(!confirm('Excluir tarefa?')) return; try{ applyChange('sprint','sprint-task',id,'delete',{},'user'); await saveTabFile('sprint'); renderAll(); }catch(e){ msg('Erro: '+e.message,false); } }
 /* ================= aba: páginas ================= */
