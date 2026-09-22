@@ -50,3 +50,10 @@ def test_tutorial_rule():
 def test_columns_in_create():
     text = read_instructions()
     assert "columns: [{name" in text
+    assert "exige" in text.lower() or "EXIGE" in text
+
+
+def test_page_elements_in_create():
+    text = read_instructions()
+    assert "elements: [{type?" in text or "elements: [{type" in text
+    assert "ao menos 1 elemento" in text or "ao menos 1" in text

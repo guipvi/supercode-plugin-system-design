@@ -125,3 +125,14 @@ def test_table_list_shows_column_names():
     assert "validateEmbeddedColumns" in html
     assert "c.name" in html
     assert "data-open-t=" in html
+
+
+def test_page_preview_uses_latest_and_comments():
+    html = read_ui()
+    assert "function renderPageDetail(" in html
+    assert "snapshotHtml" in html
+    assert "pvBlockVisual" in html
+    assert "pageOrdered" in html
+    assert "data-c-send=" in html
+    assert "PvSelected" in html
+    assert "validateEmbeddedElements" in html

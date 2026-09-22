@@ -61,6 +61,9 @@ relacionamentos — NUNCA tarefas avulsas. Tarefas nascem indiretamente:
 - `concept-element`, `page` e `table` em `create` exigem `tasks` com ao
   menos 1 tarefa `{title, desc?, priority?, status?}` — sem isso o
   `propose` é rejeitado.
+- `page` em `create` também exige `elements` (ao menos 1 com `label`);
+  `table` em `create` também exige `columns` (ao menos 1 com `name`).
+  Página sem elementos e tabela sem colunas são rejeitadas como genéricas.
 - `sprint-task` em `create` é REJEITADO sempre: embuta o trabalho na
   origem (crie a origem com `tasks`, ou proponha `update` adicionando
   `tasks` à origem aprovada).
@@ -82,7 +85,8 @@ O `propose` REJEITA com erro proposta genérica — não tente contornar,
 melhore o conteúdo:
 
 - `concept-element` / `page` / `table` em `create`: `description`
-  (ou `desc`) com 20+ caracteres reais + `tasks` com ao menos 1 tarefa.
+  (ou `desc`) com 20+ caracteres reais + `tasks` com ao menos 1 tarefa
+  + (`page`: `elements` com ≥1 `label` · `table`: `columns` com ≥1 `name`).
 - `concept-vision`: ao menos 1 dos 4 campos preenchido.
 - Regra de bolso: cada proposta deve responder *o quê*, *por quê* e
   *onde vive no repo*. Elemento de interface/página sem descrição do
@@ -218,7 +222,18 @@ A UI renderiza `desc` com os links clicáveis no botão **ver** da task
 
 ## Colunas da tabela no mesmo create
 
-`table` em `create` aceita `columns: [{name, type?, pk?, nullable?, desc?, fk?}]`
-no payload — a UI lista os nomes (chave/PK e FK no título). Sem colunas no
-create, a tabela nasce vazia e a coluna `Colunas` fica "—". Prefira modelar
+`table` em `create` ACEITA E EXIGE `columns: [{name, type?, pk?, nullable?, desc?, fk?}]`
+com ao menos 1 coluna — sem colunas o `propose` é rejeitado (tabela vazia
+não modela nada). A UI lista os nomes (chave/PK e FK no título). Modele
 tudo de uma vez; colunas novas depois vão em `table-column` create.
+
+## Elementos da página no mesmo create
+
+`page` em `create` ACEITA E EXIGE `elements: [{type?, label, content?, order?, snapshotHtml?}]`
+com ao menos 1 elemento — sem elementos o `propose` é rejeitado (página
+vazia não renderiza design). Tipos: texto|cabecalho|botao|formulario|
+imagem|lista|navegacao|outro. `order` define a pilha visual; `snapshotHtml`
+(opcional) é a última versão HTML do bloco (editor visual) e é o que a UI
+mostra na prévia ao abrir a página. Elementos novos depois vão em
+`page-element` create; design visual em `page-element` update com
+`snapshotHtml`.

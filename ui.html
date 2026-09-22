@@ -80,9 +80,17 @@ iframe.preview{width:100%;height:220px;border:1px solid #2b3345;border-radius:6p
 #btn-yes{background:#14532d;border:2px solid #1f7a33;color:#fff}
 /* ===== previa de pagina como o usuario ve ===== */
 .pv-hint{font-size:.78rem;color:#8b93a7;margin:.4rem 0 .6rem}
-.pv-card{border:1px solid #2b3345;border-radius:10px;padding:.8rem;margin-bottom:.6rem;background:#0d1220;cursor:pointer}
+.pv-card{border:1px solid #2b3345;border-radius:10px;padding:.8rem;margin-bottom:.6rem;background:#0d1220;cursor:pointer;position:relative}
 .pv-card:hover{border-color:#3b82f6}
 .pv-card.sel{border-color:#3b82f6;box-shadow:0 0 0 1px #3b82f6}
+.pv-card .pv-badge{position:absolute;top:.35rem;right:.45rem;font-size:.68rem;color:#8b93a7;background:#10151f;border:1px solid #2b3345;border-radius:6px;padding:.05rem .35rem;pointer-events:none;opacity:.85}
+.pv-card iframe.snapshot{width:100%;min-height:160px;max-height:320px;border:0;background:#fff;border-radius:6px;display:block}
+.pv-page{background:#0a0d14;border:1px solid #2b3345;border-radius:12px;padding:1rem;min-height:180px}
+.pv-page.empty{display:flex;align-items:center;justify-content:center;min-height:140px}
+.pv-toolbar{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin:.5rem 0 .7rem}
+.pv-toolbar .route{font-family:ui-monospace,monospace;color:#93c5fd;font-size:.78rem}
+#pv-comments{margin-top:.7rem;padding-top:.6rem;border-top:1px dashed #2b3345}
+#pv-comments h4{margin:0 0 .4rem;font-size:.82rem;color:#93c5fd}
 .task[draggable="true"]{cursor:grab}
 .task.dragging{opacity:.45}
 .col.dragover{outline:2px dashed #3b82f6;outline-offset:-2px}
@@ -639,21 +647,22 @@ function editTask(id){
 async function delTask(id){ if(!confirm('Excluir tarefa?')) return; try{ applyChange('sprint','sprint-task',id,'delete',{},'user'); await saveTabFile('sprint'); renderAll(); }catch(e){ msg('Erro: '+e.message,false); } }
 /* ================= aba: páginas ================= */
 let OPEN_PAGE=null;
+let PvSelected=null;
 function applyPages(kind,tid,action,payload,actor){
   const d=CACHE[FILES.pages]; payload=payload||{};
   if(kind==='page'){
-    if(action==='create'){ if(d.pages.length>=200) throw new Error('limite de paginas'); const clean=validatePage(payload); const now=new Date().toISOString(); const pg={id:vId(payload.id||uid('p')),...clean,elements:[],updatedBy:actor,updatedAt:now}; d.pages.push(pg); spawnImpliedTasksUI(pg,actor,{tab:'pages',kind:'page'}); return pg; }
+    if(action==='create'){ if(d.pages.length>=200) throw new Error('limite de paginas'); const clean=validatePage(payload); const embedded=clean.elements||[]; delete clean.elements; const now=new Date().toISOString(); const pg={id:vId(payload.id||uid('p')),...clean,elements:embedded,updatedBy:actor,updatedAt:now}; d.pages.push(pg); spawnImpliedTasksUI(pg,actor,{tab:'pages',kind:'page'}); return pg; }
     const pg=d.pages.find(p=>p.id===tid); if(!pg) throw new Error('pagina nao encontrada');
     if(action==='update'){ const clean=validatePage(payload,true); for(const k of Object.keys(clean)) if(k in payload) pg[k]=clean[k]; pg.updatedBy=actor; pg.updatedAt=new Date().toISOString(); spawnImpliedTasksUI(pg,actor,{tab:'pages',kind:'page'}); return pg; }
-    if(action==='delete'){ d.pages=d.pages.filter(p=>p.id!==tid); if(OPEN_PAGE===tid) OPEN_PAGE=null; return {deleted:tid}; }
+    if(action==='delete'){ d.pages=d.pages.filter(p=>p.id!==tid); if(OPEN_PAGE===tid){ OPEN_PAGE=null; PvSelected=null; } return {deleted:tid}; }
     throw new Error('acao invalida');
   }
   if(kind==='page-element'){
     const pageId=action==='create'?(payload.pageId||payload.page_id):(payload.pageId||payload.page_id||pageOf(tid));
     const pg=d.pages.find(p=>p.id===pageId); if(!pg) throw new Error('pagina nao encontrada');
-    if(action==='create'){ const els=pg.elements; if(els.length>=200) throw new Error('limite de elementos'); const clean=validateElement(payload); const now=new Date().toISOString(); const el={id:vId(payload.id||uid('el')),...clean,snapshotHtml:'',comments:[],updatedBy:actor,updatedAt:now}; els.push(el); return el; }
+    if(action==='create'){ const els=pg.elements; if(els.length>=200) throw new Error('limite de elementos'); const clean=validateElement(payload); const snap=clean.snapshotHtml||''; delete clean.snapshotHtml; const now=new Date().toISOString(); const el={id:vId(payload.id||uid('el')),...clean,snapshotHtml:snap,comments:[],updatedBy:actor,updatedAt:now}; els.push(el); return el; }
     const owner=pageOf(tid), el=findEl(tid);
-    if(action==='update'){ const clean=validateElement(payload,true); for(const k of Object.keys(clean)) if(k in payload) el[k]=clean[k]; if('snapshotHtml' in payload&&actor==='user') el.snapshotHtml=vStr(payload.snapshotHtml,'snapshotHtml',20000,false); el.updatedBy=actor; el.updatedAt=new Date().toISOString(); return el; }
+    if(action==='update'){ const clean=validateElement(payload,true); for(const k of Object.keys(clean)) if(k in payload) el[k]=clean[k]; if('snapshotHtml' in payload) el.snapshotHtml=vStr(payload.snapshotHtml,'snapshotHtml',20000,false); el.updatedBy=actor; el.updatedAt=new Date().toISOString(); return el; }
     if(action==='delete'){ const o=d.pages.find(p=>p.id===owner); o.elements=o.elements.filter(e=>e.id!==tid); return {deleted:tid}; }
     throw new Error('acao invalida');
   }
@@ -668,14 +677,30 @@ function applyPages(kind,tid,action,payload,actor){
 }
 function validatePage(p,partial){ const req=!partial; const o={};
   o.name=vStr(p.name,'name',200,req); o.route=vStr(p.route,'route',200,false); o.desc=vStr(p.desc,'desc',5000,false);
-  if(o.route&&!/^[A-Za-z0-9/_.:-]{1,200}$/.test(o.route)) throw new Error('route invalida'); return o; }
-function validateElement(p,partial){ const req=!partial; return {type:vEnum(p.type,'type',ENUMS.ptype,'texto'),label:vStr(p.label,'label',200,req),content:vStr(p.content,'content',20000,false),order:Number.isInteger(p.order)?p.order:0}; }
+  if(o.route&&!/^[A-Za-z0-9/_.:-]{1,200}$/.test(o.route)) throw new Error('route invalida');
+  if('elements' in p&&!partial) o.elements=validateEmbeddedElements(p.elements);
+  return o; }
+function validateEmbeddedElements(raw){
+  if(raw==null) return [];
+  if(!Array.isArray(raw)) throw new Error("'elements' deve ser uma lista");
+  if(raw.length>200) throw new Error('limite de elementos da pagina');
+  const out=[];
+  for(let i=0;i<raw.length;i++){
+    const item=raw[i];
+    if(!item||typeof item!=='object') throw new Error('elements['+i+'] invalida');
+    const clean=validateElement(item);
+    if(!(clean.label||'').trim()) throw new Error('elements['+i+'].label obrigatorio');
+    out.push({id:vId(item.id||uid('el')),...clean,snapshotHtml:item.snapshotHtml!=null?vStr(item.snapshotHtml,'snapshotHtml',20000,false):'',comments:[]});
+  }
+  return out;
+}
+function validateElement(p,partial){ const req=!partial; const o={type:vEnum(p.type,'type',ENUMS.ptype,'texto'),label:vStr(p.label,'label',200,req),content:vStr(p.content,'content',20000,false),order:Number.isInteger(p.order)?p.order:0}; if('snapshotHtml' in p) o.snapshotHtml=vStr(p.snapshotHtml,'snapshotHtml',20000,false); return o; }
 function pageOf(eid){ for(const p of CACHE[FILES.pages].pages) for(const e of (p.elements||[])) if(e.id===eid) return p.id; throw new Error('elemento nao encontrado'); }
 function findEl(eid){ vId(eid); for(const p of CACHE[FILES.pages].pages) for(const e of (p.elements||[])) if(e.id===eid) return e; throw new Error('elemento nao encontrado'); }
 function renderPages(){
   const d=CACHE[FILES.pages];
   $('pages-list').innerHTML=d.pages.length?'<table><tr><th>Página</th><th>Rota</th><th>Elem.</th><th></th></tr>'+d.pages.map(p=>`<tr><td><strong>${esc(p.name)}</strong> <br><span class="muted">${esc((p.desc||'').slice(0,120))}</span></td><td class="mono">${esc(p.route||'—')}</td><td>${(p.elements||[]).length}</td><td style="white-space:nowrap"><button class="sm" data-open-p="${esc(p.id)}">abrir</button> <button class="ghost sm" data-edit-p="${esc(p.id)}">editar</button>  <button class="danger sm" data-del-p="${esc(p.id)}">x</button></td></tr>`).join('')+'</table>':'<span class="muted">Nenhuma página. Cadastre as páginas do sistema.</span>';
-  $('pages-list').querySelectorAll('[data-open-p]').forEach(b=>b.onclick=()=>{OPEN_PAGE=b.dataset.openP;renderPageDetail();});
+  $('pages-list').querySelectorAll('[data-open-p]').forEach(b=>b.onclick=()=>{OPEN_PAGE=b.dataset.openP;PvSelected=null;renderPageDetail();});
   $('pages-list').querySelectorAll('[data-edit-p]').forEach(b=>b.onclick=()=>editPage(b.dataset.editP));
   $('pages-list').querySelectorAll('[data-del-p]').forEach(b=>b.onclick=()=>delPage(b.dataset.delP));
   renderPageDetail();
@@ -690,30 +715,53 @@ async function delPage(id){ if(!confirm('Excluir página e seus elementos?')) re
 function pvRender(el){
   const label=esc(el.label||''), content=esc(el.content||'');
   if(el.type==='cabecalho') return `<h3>${label}</h3>${el.content?`<p class="muted">${content}</p>`:''}`;
-  if(el.type==='botao') return `<button>${label||'Botão'}</button>${el.content?`<div class="muted" style="margin-top:.3rem">${content}</div>`:''}`;
+  if(el.type==='botao') return `<button type="button">${label||'Botão'}</button>${el.content?`<div class="muted" style="margin-top:.3rem">${content}</div>`:''}`;
   if(el.type==='formulario') return `<div class="frm"><label>${label||'Campo'}<input type="text" placeholder="${esc((el.content||'').slice(0,40))}"></label></div>`;
   if(el.type==='imagem') return `<div style="background:#1a2130;border-radius:6px;min-height:110px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:.3rem"><span style="font-size:1.6rem">🖼</span><span class="muted">${label}</span></div>`;
   if(el.type==='lista'){ const items=(el.content||'').split('\n').map(s=>s.trim()).filter(Boolean).slice(0,6); return `${label?`<strong>${label}</strong>`:''}<ul style="margin:.3rem 0 .3rem 1.1rem">${items.map(i=>`<li>${esc(i)}</li>`).join('')||'<li class="muted">(vazia)</li>'}</ul>`; }
   if(el.type==='navegacao'){ const links=label.split('|').map(s=>s.trim()).filter(Boolean); return `<nav class="row">${links.map(l=>`<button class="ghost sm" type="button">${esc(l)}</button>`).join('')||'<span class="muted">(sem links)</span>'}</nav>`; }
   return `${label?`<p><strong>${label}</strong></p>`:''}${el.content?`<p>${content}</p>`:''}`;
 }
+function pageOrdered(pg){
+  return [...(pg.elements||[])].sort((a,b)=>(Number(a.order)||0)-(Number(b.order)||0)||(String(a.updatedAt||'').localeCompare(String(b.updatedAt||''))));
+}
+function pvBlockVisual(el){
+  if(el.snapshotHtml) return `<iframe class="snapshot" sandbox="" loading="lazy" srcdoc="${esc(el.snapshotHtml)}" title="${esc(el.label||'elemento')}"></iframe>`;
+  return pvRender(el);
+}
 function renderPageDetail(){
   const host=$('page-detail');
   const pg=CACHE[FILES.pages].pages.find(p=>p.id===OPEN_PAGE);
   if(!pg){ host.innerHTML=''; return; }
-  host.innerHTML=`<div class="card"><h2>${esc(pg.name)}  <span class="hint">elementos, comentários e travas de design</span></h2>
-  <h3>Prévia como o usuário vê <span class="hint">clique num bloco para comentar como revisor</span></h3>
-  <div id="pv-list">${(pg.elements||[]).map(e=>`<div class="pv-card" data-pv="${esc(e.id)}">${pvRender(e)}</div>`).join('')||'<span class="muted">Sem elementos ainda.</span>'}</div>
-  ${(pg.elements||[]).map(e=>`<div class="task"><div class="t">[${esc(e.type)}] ${esc(e.label)} </div><div class="muted" style="white-space:pre-wrap">${esc((e.content||'').slice(0,300))}</div>
-  ${e.snapshotHtml?`<details><summary>pré-visualização do editor visual</summary><iframe class="preview" sandbox="" srcdoc="${esc(e.snapshotHtml)}"></iframe></details>`:''}
-  <details id="c-det-${esc(e.id)}"><summary>Comentários (${(e.comments||[]).length})</summary><div>${(e.comments||[]).map(c=>`<div class="comment"><div class="who">${esc(c.author)} · ${esc(fmtDate(c.createdAt))}</div><div class="txt">${esc(c.text)}</div></div>`).join('')||'<span class="muted">sem comentários</span>'}</div><div class="row" style="margin-top:.4rem"><input type="text" data-c-author="${esc(e.id)}" class="grow" placeholder="seu nome" maxlength="120" value="você"><input type="text" data-c-text="${esc(e.id)}" class="grow" placeholder="Comentar neste elemento..." maxlength="2000"><button class="sm" data-c-send="${esc(e.id)}">Comentar</button></div></details>
-  <div class="row" style="margin-top:.35rem"><button class="ghost sm" data-edit-el2="${esc(e.id)}">editar</button><button class="ghost sm" data-visual="${esc(e.id)}">editor visual</button><button class="danger sm" data-del-el2="${esc(e.id)}">x</button></div></div>`).join('')||'<span class="muted">Sem elementos ainda.</span>'}
-  <h3>Novo elemento</h3><div class="row"><select id="e-type">${ENUMS.ptype.map(t=>`<option>${t}</option>`).join('')}</select><input type="text" id="e-label" class="grow" placeholder="Rótulo (até 200)" maxlength="200"><input type="text" id="e-content" class="grow" placeholder="Conteúdo/descrição (até 20000)" maxlength="20000"><button id="e-add">Adicionar</button></div></div>`;
+  const ordered=pageOrdered(pg);
+  const selId=PvSelected && ordered.some(e=>e.id===PvSelected) ? PvSelected : null;
+  const sel=selId ? ordered.find(e=>e.id===selId) : null;
+  const canvas=ordered.length
+    ? ordered.map(e=>`<div class="pv-card${e.id===PvSelected?' sel':''}" data-pv="${esc(e.id)}" data-el-label="${esc(e.label||e.type)}"><span class="pv-badge">${esc(e.type||'texto')}${e.snapshotHtml?' · design':''}</span>${pvBlockVisual(e)}</div>`).join('')
+    : `<div class="pv-page empty"><span class="muted">Sem elementos ainda. Adicione abaixo ou aguarde proposta do agente com <code>elements</code>.</span></div>`;
+  const commentsHtml=sel ? `
+  <div id="pv-comments" data-for="${esc(sel.id)}">
+    <h4>Comentar «${esc(sel.label||sel.type)}» <span class="muted">(${(sel.comments||[]).length})</span></h4>
+    ${(sel.comments||[]).map(c=>`<div class="comment"><div class="who">${esc(c.author)} · ${esc(fmtDate(c.createdAt))}</div><div class="txt">${esc(c.text)}</div></div>`).join('')||'<div class="muted" style="margin:.2rem 0 .4rem">Nenhum comentário ainda.</div>'}
+    <div class="row" style="margin-top:.4rem"><input type="text" data-c-author="${esc(sel.id)}" class="grow" placeholder="seu nome" maxlength="120" value="você"><input type="text" data-c-text="${esc(sel.id)}" class="grow" placeholder="Comentar neste elemento..." maxlength="2000"><button class="sm" data-c-send="${esc(sel.id)}">Comentar</button></div>
+    <div class="row" style="margin-top:.4rem"><button class="ghost sm" data-edit-el2="${esc(sel.id)}">editar</button><button class="ghost sm" data-visual="${esc(sel.id)}">editor visual</button><button class="danger sm" data-del-el2="${esc(sel.id)}">excluir</button></div>
+  </div>` : `<div id="pv-comments"><p class="pv-hint">Clique num bloco da prévia para selecionar e comentar como revisor. A prévia usa a última versão (<span class="mono">snapshotHtml</span> do editor visual) quando existir; senão renderiza o elemento estruturado.</p></div>`;
+  host.innerHTML=`<div class="card"><h2>${esc(pg.name)}</h2>
+  <div class="pv-toolbar"><span class="route">${esc(pg.route||'sem rota')}</span><span class="muted">${ordered.length} elemento(s) · última versão</span><span style="flex:1"></span><span class="muted">${esc((pg.desc||'').slice(0,160))}</span></div>
+  <div id="pv-list" class="pv-page">${canvas}</div>
+  ${commentsHtml}
+  <details ${ordered.length?'':'open'} style="margin-top:.7rem"><summary>Gerenciar elementos (${ordered.length})</summary>
+  ${ordered.map(e=>`<div class="task"><div class="t">[${esc(e.type)}] ${esc(e.label)} <span class="muted">ordem ${Number(e.order)||0}${e.snapshotHtml?' · tem design':''}</span></div><div class="muted" style="white-space:pre-wrap">${esc((e.content||'').slice(0,300))}</div>
+  <div class="row" style="margin-top:.35rem"><button class="ghost sm" data-edit-el2="${esc(e.id)}">editar</button><button class="ghost sm" data-visual="${esc(e.id)}">editor visual</button><button class="ghost sm" data-pv="${esc(e.id)}">ver/comentar</button><button class="danger sm" data-del-el2="${esc(e.id)}">x</button></div></div>`).join('')||'<span class="muted">Sem elementos.</span>'}
+  </details>
+  <h3>Novo elemento</h3><div class="row"><select id="e-type">${ENUMS.ptype.map(t=>`<option>${t}</option>`).join('')}</select><input type="text" id="e-label" class="grow" placeholder="Rótulo (até 200)" maxlength="200"><input type="text" id="e-content" class="grow" placeholder="Conteúdo/descrição (até 20000)" maxlength="20000"><input type="number" id="e-order" class="grow" placeholder="ordem" value="${ordered.length}" min="0" style="max-width:5rem" title="ordem na pilha visual"><button id="e-add">Adicionar</button></div></div>`;
   host.querySelectorAll('[data-pv]').forEach(c=>c.onclick=()=>{
-    host.querySelectorAll('.pv-card').forEach(x=>x.classList.remove('sel'));
-    c.classList.add('sel');
-    const det=$('c-det-'+c.dataset.pv);
-    if(det){ det.open=true; const inp=det.querySelector(`[data-c-text="${c.dataset.pv}"]`); if(inp){ inp.focus(); inp.scrollIntoView({block:'nearest',behavior:'smooth'}); } }
+    PvSelected=c.dataset.pv;
+    renderPageDetail();
+    const card=host.querySelector(`.pv-card[data-pv="${CSS.escape(PvSelected)}"]`);
+    if(card){ card.classList.add('sel'); card.scrollIntoView({block:'nearest',behavior:'smooth'}); }
+    const inp=host.querySelector(`[data-c-text="${PvSelected}"]`);
+    if(inp) inp.focus();
   });
   host.querySelectorAll('[data-edit-el2]').forEach(b=>b.onclick=()=>editPageElement(b.dataset.editEl2));
   host.querySelectorAll('[data-del-el2]').forEach(b=>b.onclick=()=>delPageElement(b.dataset.delEl2));
@@ -722,14 +770,14 @@ function renderPageDetail(){
   $('e-add').onclick=addPageElement;
 }
 async function addPageElement(){
-  try{ applyChange('pages','page-element',null,'create',{pageId:OPEN_PAGE,type:$('e-type').value,label:$('e-label').value,content:$('e-content').value},'user'); await saveTabFile('pages'); renderAll(); msg('Elemento adicionado.',true);}catch(e){msg('Erro: '+e.message,false);}
+  try{ applyChange('pages','page-element',null,'create',{pageId:OPEN_PAGE,type:$('e-type').value,label:$('e-label').value,content:$('e-content').value,order:parseInt($('e-order').value,10)||0},'user'); await saveTabFile('pages'); renderAll(); msg('Elemento adicionado.',true);}catch(e){msg('Erro: '+e.message,false);}
 }
 function editPageElement(id){
   const el=findEl(id);
   openModal(`<h2 style="color:#93c5fd;margin-bottom:.5rem">Editar elemento</h2><div class="frm"><div class="row"><select id="m-type">${ENUMS.ptype.map(t=>`<option ${t===el.type?'selected':''}>${t}</option>`).join('')}</select><input type="text" id="m-label" class="grow" value="${esc(el.label)}" maxlength="200"></div><label>Conteúdo<textarea id="m-content" maxlength="20000">${esc(el.content||'')}</textarea></label></div><div class="row"><button id="m-save">Salvar</button><button class="ghost" onclick="closeModal()">Cancelar</button></div>`);
   $('m-save').onclick=async()=>{ try{ applyChange('pages','page-element',id,'update',{type:$('m-type').value,label:$('m-label').value,content:$('m-content').value},'user'); await saveTabFile('pages'); closeModal(); renderAll(); msg('Elemento salvo.',true);}catch(e){msg('Erro: '+e.message,false);} };
 }
-async function delPageElement(id){ if(!confirm('Excluir elemento?')) return; try{ applyChange('pages','page-element',id,'delete',{pageId:pageOf(id)},'user'); await saveTabFile('pages'); renderAll(); }catch(e){ msg('Erro: '+e.message,false); } }
+async function delPageElement(id){ if(!confirm('Excluir elemento?')) return; try{ applyChange('pages','page-element',id,'delete',{pageId:pageOf(id)},'user'); await saveTabFile('pages'); if(PvSelected===id) PvSelected=null; renderAll(); }catch(e){ msg('Erro: '+e.message,false); } }
 async function sendComment(eid){
   const host=$('page-detail');
   const author=host.querySelector(`[data-c-author="${eid}"]`).value||'você';
@@ -755,7 +803,7 @@ async function openVisualEditor(eid){
   try{
     await loadGrapes();
     const ed=grapesjs.init({container:'#grapes-host',height:'420px',fromElement:false,storageManager:false,components:el.snapshotHtml||`<div><h2>${esc(el.label)}</h2><p>${esc(el.content||'')}</p></div>`});
-    $('g-save').onclick=async()=>{ try{ const html=ed.getHtml(); applyChange('pages','page-element',eid,'update',{snapshotHtml:html},'user'); await saveTabFile('pages'); closeModal(); renderAll(); msg('Design salvo como pré-visualização.',true);}catch(e){msg('Erro: '+e.message,false);} };
+    $('g-save').onclick=async()=>{ try{ const html=ed.getHtml(); applyChange('pages','page-element',eid,'update',{snapshotHtml:html},'user'); await saveTabFile('pages'); PvSelected=eid; closeModal(); renderAll(); msg('Design salvo: a prévia da página já usa a última versão.',true);}catch(e){msg('Erro: '+e.message,false);} };
   }catch(e){ $('g-msg').textContent='Editor visual indisponível (sem internet para o CDN). Use o formulário de conteúdo.'; }
 }
 

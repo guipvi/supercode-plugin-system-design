@@ -265,32 +265,58 @@ def test_standalone_tasks_rejected_pages_need_tasks(root):
                       {"title": "Fazer X", "desc": "Detalhar o fluxo de checkout ponta a ponta"})
     # page sem tasks: generica
     with pytest.raises(ValueError, match="generica"):
-        store.propose(root, PROJ, "pages", "page", None, "create", {"name": "Home", "route": "/"})
+        store.propose(root, PROJ, "pages", "page", None, "create",
+                      {"name": "Home", "route": "/",
+                       "desc": "Pagina inicial publica com proposta de valor",
+                       "elements": [{"label": "Hero"}]})
+    # page com tasks mas sem elements: generica
+    with pytest.raises(ValueError, match="elements"):
+        store.propose(root, PROJ, "pages", "page", None, "create",
+                      {"name": "Home", "route": "/",
+                       "desc": "Pagina inicial publica com proposta de valor",
+                       "tasks": [{"title": "Montar hero"}]})
     with pytest.raises(ValueError, match="generica"):
         store.propose(root, PROJ, "concept", "concept-vision", None, "update", {})
-    # page com tasks: pacote valido
+    # page com tasks + elements: pacote valido
     ok = store.propose(root, PROJ, "pages", "page", None, "create",
                        {"name": "Home", "route": "/",
                         "desc": "Pagina inicial publica com proposta de valor",
+                        "elements": [
+                            {"type": "cabecalho", "label": "Hero", "content": "Bem-vindo"},
+                            {"type": "botao", "label": "Começar", "order": 1},
+                        ],
                         "tasks": [{"title": "Montar hero"}]})
     assert ok["status"] == "pending"
     # table sem tasks: generica
     with pytest.raises(ValueError, match="generica"):
         store.propose(root, PROJ, "tables", "table", None, "create", {"name": "users"})
+    # table com tasks mas sem columns: generica
+    with pytest.raises(ValueError, match="columns"):
+        store.propose(root, PROJ, "tables", "table", None, "create",
+                      {"name": "users", "desc": "Usuarios do sistema com email e senha",
+                       "tasks": [{"title": "Criar tabela users"}]})
     out = store.decide(root, PROJ, ok["id"], True)
     assert [t["title"] for t in out["spawnedTasks"]] == ["Montar hero"]
     assert store.load_data(root, PROJ, store.SPRINT_FILE)["tasks"][0]["origin"]["tab"] == "pages"
+    page = store.load_data(root, PROJ, store.PAGES_FILE)["pages"][0]
+    assert [e["label"] for e in page["elements"]] == ["Hero", "Começar"]
 
 
 def test_approve_table_spawns_with_origin(root):
     prop = store.propose(root, PROJ, "tables", "table", None, "create",
                          {"name": "orders", "desc": "Pedidos do marketplace em geral",
+                          "columns": [
+                              {"name": "id", "type": "uuid", "pk": True},
+                              {"name": "total", "type": "numeric"},
+                          ],
                           "tasks": [{"title": "Criar migration orders", "status": "executado", "desc": "migration 0025"}]})
     out = store.decide(root, PROJ, prop["id"], True)
     assert len(out["spawnedTasks"]) == 1
     t = store.load_data(root, PROJ, store.SPRINT_FILE)["tasks"][0]
     assert (t["title"], t["status"]) == ("Criar migration orders", "executado")
     assert t["origin"] == {"tab": "tables", "kind": "table", "id": t["origin"]["id"], "title": "orders"}
+    table = store.load_data(root, PROJ, store.TABLES_FILE)["tables"][0]
+    assert [c["name"] for c in table["columns"]] == ["id", "total"]
 
 
 def test_user_direct_create_stays_free(root):
@@ -418,3 +444,52 @@ def test_table_create_columns_dup_rejected(root):
                           {"name": "dup",
                            "desc": "tabela com colunas duplicadas",
                            "columns": ["id", "id"]})
+
+
+def test_page_create_embedded_elements(root):
+    pg = store.user_action(root, PROJ, "pages", "page", None, "create",
+                           {"name": "Login", "route": "/login",
+                            "desc": "Tela de autenticacao com email e senha",
+                            "elements": [
+                                {"type": "cabecalho", "label": "Entrar", "order": 0},
+                                {"type": "formulario", "label": "Email", "content": "email@x"},
+                                {"type": "botao", "label": "Entrar", "order": 2,
+                                 "snapshotHtml": "<button>Entrar</button>"},
+                            ]})
+    assert len(pg["elements"]) == 3
+    assert pg["elements"][2]["snapshotHtml"] == "<button>Entrar</button>"
+    assert pg["elements"][0]["comments"] == []
+    got = store.load_data(root, PROJ, store.PAGES_FILE)["pages"][0]
+    assert [e["label"] for e in got["elements"]] == ["Entrar", "Email", "Entrar"]
+
+
+def test_propose_page_requires_elements_and_table_columns(root):
+    import pytest as _pt
+    with _pt.raises(ValueError, match="elements"):
+        store.propose(root, PROJ, "pages", "page", None, "create",
+                      {"name": "P", "desc": "Pagina com descricao real o suficiente",
+                       "tasks": [{"title": "t"}]})
+    with _pt.raises(ValueError, match="columns"):
+        store.propose(root, PROJ, "tables", "table", None, "create",
+                      {"name": "t1", "desc": "Tabela com descricao real o suficiente",
+                       "tasks": [{"title": "t"}]})
+    ok = store.propose(root, PROJ, "pages", "page", None, "create",
+                       {"name": "P", "route": "/p",
+                        "desc": "Pagina com descricao real o suficiente",
+                        "elements": [{"type": "texto", "label": "Corpo"}],
+                        "tasks": [{"title": "t"}]})
+    assert ok["status"] == "pending"
+
+
+def test_agent_propose_snapshot_html_applies(root):
+    pg = store.user_action(root, PROJ, "pages", "page", None, "create",
+                           {"name": "Home", "route": "/",
+                            "desc": "Pagina inicial com descricao real",
+                            "elements": [{"label": "Hero"}]})
+    eid = pg["elements"][0]["id"]
+    prop = store.propose(root, PROJ, "pages", "page-element", eid, "update",
+                         {"snapshotHtml": "<section class=\"hero\">Oi</section>"},
+                         "design visual")
+    store.decide(root, PROJ, prop["id"], True)
+    got = store.load_data(root, PROJ, store.PAGES_FILE)["pages"][0]["elements"][0]
+    assert "hero" in got["snapshotHtml"]

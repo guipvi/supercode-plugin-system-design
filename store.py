@@ -460,6 +460,31 @@ def apply_sprint(data, target_id, action, payload, actor):
 
 # -------------------------------------------------------------------- paginas
 
+def _validate_embedded_page_elements(raw):
+    """Elementos embutidos no create da pagina: [{type?, label, content?, order?, snapshotHtml?}]."""
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise ValueError("'elements' deve ser uma lista")
+    if len(raw) > MAX_PAGE_ELEMENTS:
+        raise ValueError("limite de elementos da pagina")
+    out = []
+    for i, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise ValueError(f"elements[{i}] invalida")
+        clean = validate_page_element(item)
+        if not (clean.get("label") or "").strip():
+            raise ValueError(f"elements[{i}].label obrigatorio")
+        out.append({
+            "id": validate_entity_id(item.get("id") or _new_id("el"), "id"),
+            **clean,
+            "snapshotHtml": _check_str(
+                item.get("snapshotHtml"), "snapshotHtml", MAX_DETAILS, required=False),
+            "comments": [],
+        })
+    return out
+
+
 def validate_page(payload, partial=False):
     req = (not partial)
     out = {
@@ -470,17 +495,23 @@ def validate_page(payload, partial=False):
     out.update(_validate_tasks_field(payload, req))
     if out["route"] and not re.match(r"^[A-Za-z0-9/_.:-]{1,200}$", out["route"]):
         raise ValueError("route invalida")
+    if "elements" in payload and not partial:
+        out["elements"] = _validate_embedded_page_elements(payload.get("elements"))
     return out
 
 
 def validate_page_element(payload, partial=False):
     req = (not partial)
-    return {
+    out = {
         "type": _check_enum(payload.get("type"), "type", PAGE_ELEMENT_TYPES, required=False, default="texto"),
         "label": _check_str(payload.get("label"), "label", MAX_TITLE, required=req),
         "content": _check_str(payload.get("content"), "content", MAX_DETAILS, required=False),
         "order": payload.get("order", 0) if isinstance(payload.get("order", 0), int) else 0,
     }
+    if "snapshotHtml" in payload:
+        out["snapshotHtml"] = _check_str(
+            payload.get("snapshotHtml"), "snapshotHtml", MAX_DETAILS, required=False)
+    return out
 
 
 def _find_page(data, page_id):
@@ -505,11 +536,12 @@ def apply_pages(data, target_kind, target_id, action, payload, actor):
             if len(pages) >= MAX_PAGES:
                 raise ValueError("limite de paginas atingido")
             clean = validate_page(payload)
+            elements = clean.pop("elements", [])
             now = utcnow()
             pages.append({
                 "id": validate_entity_id(payload.get("id") or _new_id("p"), "id"),
                 **clean,
-                    "elements": [], "updatedBy": actor, "updatedAt": now,
+                    "elements": elements, "updatedBy": actor, "updatedAt": now,
             })
             return pages[-1]
         page = next((p for p in pages if p.get("id") == target_id), None)
@@ -537,11 +569,13 @@ def apply_pages(data, target_kind, target_id, action, payload, actor):
             if len(elements) >= MAX_PAGE_ELEMENTS:
                 raise ValueError("limite de elementos da pagina atingido")
             clean = validate_page_element(payload)
+            snap = clean.pop("snapshotHtml", "") or ""
             now = utcnow()
             elements.append({
                 "id": validate_entity_id(payload.get("id") or _new_id("el"), "id"),
                 **clean,
-                    "snapshotHtml": "", "comments": [],
+                    "snapshotHtml": snap,
+                    "comments": [],
                 "updatedBy": actor, "updatedAt": now,
             })
             return elements[-1]
@@ -551,8 +585,9 @@ def apply_pages(data, target_kind, target_id, action, payload, actor):
             for key, value in clean.items():
                 if key in payload:
                     el[key] = value
-            if "snapshotHtml" in payload and actor == "user":
-                el["snapshotHtml"] = _check_str(payload.get("snapshotHtml"), "snapshotHtml", MAX_DETAILS, required=False)
+            if "snapshotHtml" in payload:
+                el["snapshotHtml"] = _check_str(
+                    payload.get("snapshotHtml"), "snapshotHtml", MAX_DETAILS, required=False)
             el["updatedBy"] = actor
             el["updatedAt"] = utcnow()
             return el
@@ -891,6 +926,23 @@ def _check_not_generic(tab, target_kind, action, payload):
                 "descrevendo o trabalho que o conceito demanda (status pode vir "
                 "'done' com evidencia quando o repo ja executa). Tarefa avulsa "
                 "separada nao entra no inbox: embuta no conceito.")
+    if action == "create" and (tab, target_kind) == ("pages", "page"):
+        els = (payload or {}).get("elements")
+        if not (isinstance(els, list) and any(
+                isinstance(x, dict) and str(x.get("label", "")).strip()
+                for x in els)):
+            raise ValueError(
+                "proposta generica: page.create do agente exige 'elements' com ao "
+                "menos 1 elemento {type?, label, content?, order?, snapshotHtml?} — "
+                "a pagina nasce visualizavel na ultima versao, com clique para "
+                "comentar. Sem elementos a UI mostra pagina vazia.")
+    if action == "create" and (tab, target_kind) == ("tables", "table"):
+        cols = (payload or {}).get("columns")
+        if not (isinstance(cols, list) and len(cols) > 0):
+            raise ValueError(
+                "proposta generica: table.create do agente exige 'columns' com ao "
+                "menos 1 coluna {name, type?, pk?, nullable?, desc?, fk?} — "
+                "tabela sem colunas nao modela nada. Modele tudo no mesmo create.")
     payload = payload or {}
     for field, minimum in spec:
         value = payload.get(field)

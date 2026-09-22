@@ -118,7 +118,11 @@ if mcp is not None:
         """Propõe uma mudança (vira pending; o usuário aprova pela UI).
         NUNCA edite os arquivos .opencode/system-design/ diretamente.
         QUALIDADE MINIMA (rejeitado com erro se generico): `concept-element`,
-        `page` e `table` em `create` exigem `description`/`desc` com 20+ … `table` também aceita `columns: [{name, type?, pk?, nullable?, fk?}]` no mesmo create (a UI lista os nomes).
+        `page` e `table` em `create` exigem `description`/`desc` com 20+ …
+        `page` também exige `elements: [{type?, label, content?, order?, snapshotHtml?}]`
+        (ao menos 1) para a UI renderir a última versão e permitir comentários;
+        `table` também exige `columns: [{name, type?, pk?, nullable?, fk?}]`
+        (ao menos 1) — a UI lista os nomes (PK/FK).
         caracteres reais (responsabilidades, regras, onde vive no repo);
         `concept-vision` exige ao menos 1 campo preenchido. Nunca proponha
         titulo + referencia solta.
@@ -147,6 +151,7 @@ if mcp is not None:
     @mcp.tool()
     def system_design_list_proposals(project: str, status: str = "pending") -> dict:
         """Lista propostas (pending|approved|rejected|all) de um projeto."""
+        return tool_list_proposals(project, status)
 
     @mcp.tool()
     def system_design_task_update(project: str, task_id: str,
@@ -161,7 +166,6 @@ if mcp is not None:
             payload_json: objeto JSON parcial com os campos.
         """
         return tool_task_update(project, task_id, payload_json)
-        return tool_list_proposals(project, status)
 
 
 if __name__ == "__main__":
