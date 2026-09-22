@@ -382,8 +382,9 @@ function renderInbox(){
 function bindSwipe(card,id,locked){
   let sx=0,dx=0,drag=false;
   const yes=$('stamp-yes'),no=$('stamp-no');
+  const interactive=t=>t&&t.closest&&(t.closest('button,summary,a,input,textarea,select,iframe')!==null);
   card.style.transition='';
-  card.onpointerdown=e=>{ drag=true; sx=e.clientX; card.setPointerCapture&&card.setPointerCapture(e.pointerId); };
+  card.onpointerdown=e=>{ if(interactive(e.target)) return; drag=true; sx=e.clientX; card.setPointerCapture&&card.setPointerCapture(e.pointerId); };
   card.onpointermove=e=>{ if(!drag) return; dx=e.clientX-sx;
     card.style.transform=`translateX(${dx}px) rotate(${dx/14}deg)`;
     yes.style.opacity=Math.max(0,Math.min(1,dx/90)); no.style.opacity=Math.max(0,Math.min(1,-dx/90)); };
