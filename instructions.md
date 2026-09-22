@@ -98,3 +98,8 @@ Por isso, todo artefato que represente o sistema deve ser REGISTRADO:
   proposta aprovada ou pendente. Arquivo solto = trabalho invisível.
 - Vale também para outputs de sandbox/downloads: copie para dentro do
   projeto e registre; `downloads/` e `/tmp/` não são o projeto.
+- PROIBIDO criar arquivos `*-propostas*.json`, `*-v2.json` ou qualquer
+  "scaffolding" de propostas fora de `.opencode/system-design/`: o inbox
+  (proposals.json via `system_design_propose`) É a área de stage. Se as
+  tools MCP estiverem indisponíveis, AVISE o usuário e aguarde — nunca
+  despeje o conteúdo num arquivo solto "para depois".
