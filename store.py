@@ -541,7 +541,8 @@ def apply_pages(data, target_kind, target_id, action, payload, actor):
             pages.append({
                 "id": validate_entity_id(payload.get("id") or _new_id("p"), "id"),
                 **clean,
-                    "elements": elements, "updatedBy": actor, "updatedAt": now,
+                    "elements": elements, "comments": [],
+                "updatedBy": actor, "updatedAt": now,
             })
             return pages[-1]
         page = next((p for p in pages if p.get("id") == target_id), None)
@@ -599,17 +600,29 @@ def apply_pages(data, target_kind, target_id, action, payload, actor):
     if target_kind == "page-comment":
         if action != "comment":
             raise ValueError("comentarios usam acao 'comment'")
-        owner_page_id, el = _find_element_anywhere(data, payload.get("elementId") or payload.get("element_id") or target_id)
-        comments = el.setdefault("comments", [])
-        if len(comments) >= MAX_COMMENTS:
-            raise ValueError("limite de comentarios atingido")
         text = _check_str(payload.get("text"), "text", MAX_COMMENT, required=True)
         author = _check_str(payload.get("author"), "author", 120, required=False) or actor
         comment = {"id": validate_entity_id(payload.get("id") or _new_id("c"), "id"),
                    "author": author, "text": text, "createdAt": utcnow()}
+        # Comentario em ELEMENTO (elementId) ou no RESULTADO FINAL da PAGINA (pageId).
+        # Sem payload explícito, o target_id pode ser o id do elemento (compat) ou da página.
+        el_ref = payload.get("elementId") or payload.get("element_id")
+        page_ref = payload.get("pageId") or payload.get("page_id")
+        if el_ref:
+            _, holder = _find_element_anywhere(data, el_ref)
+        elif page_ref:
+            holder = _find_page(data, page_ref)
+        else:
+            try:
+                _, holder = _find_element_anywhere(data, target_id)
+            except ValueError:
+                holder = _find_page(data, target_id)
+        comments = holder.setdefault("comments", [])
+        if len(comments) >= MAX_COMMENTS:
+            raise ValueError("limite de comentarios atingido")
         comments.append(comment)
-        el["updatedBy"] = actor
-        el["updatedAt"] = utcnow()
+        holder["updatedBy"] = actor
+        holder["updatedAt"] = utcnow()
         return comment
     raise ValueError(f"alvo invalido para paginas: {target_kind!r}")
 

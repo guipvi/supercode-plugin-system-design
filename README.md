@@ -27,11 +27,13 @@ para o sistema não conseguir mais alterá-lo.
   sua aprovação**, mesmo destravada.
 - **Sprint** — backlog, executando e executado por projeto (criar, mover,
   editar, travar tarefas).
-- **Páginas** — páginas + elementos com **comentários**, edição própria e
-  **trava de design por elemento**. Inclui pré-visualização e um
-  **editor visual open-source (GrapesJS, MIT)** carregado somente quando
-  você clica em "editor visual" (com fallback para o formulário se o CDN
-  estiver fora).
+- **Páginas** — páginas + elementos com **comentários** por elemento e
+  **comentário sobre o resultado final da página**. A prévia é uma
+  **simulação da página final** (iframe único, elementos na ordem, usando
+  o design do editor visual quando existir) com clique para selecionar e
+  comentar blocos. Inclui um **editor visual open-source (GrapesJS, MIT)**
+  carregado somente quando você clica em "editor visual" (com fallback
+  para o formulário se o CDN estiver fora).
 - **Tabelas** — entidades, colunas (tipos, PK, FK, NOT NULL) e relações
   (1:1, 1:N, N:N) com validação referencial e **trava por tabela, coluna
   e relação**.

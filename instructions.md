@@ -31,7 +31,7 @@ plugin (projeto conceitual, sprint, páginas, tabelas, propostas).
   (progresso e correções; `create` é rejeitado: tarefas nascem de
   aprovações, nunca avulsas).
 - `page`: create|update|delete. `page-element`: create|update|delete.
-- `page-comment`: comment — `{elementId, text}` (comentário do agente).
+- `page-comment`: comment — `{elementId|pageId, text}` (comentário do agente no elemento ou no resultado final da página).
 - `table`: create|update|delete. `table-column`: create|update|delete.
 - `relation`: create|update|delete.
 

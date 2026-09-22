@@ -100,11 +100,11 @@ iframe.preview{width:100%;height:220px;border:1px solid #2b3345;border-radius:6p
 .deck-queue .qkind{display:inline-block;background:#1a1a2e;border:1px solid #4a4a6a;border-radius:8px;color:#a0a0c0;font-size:.68rem;padding:0 .35rem;margin-right:.3rem}
 /* ===== previa de pagina como o usuario ve ===== */
 .pv-hint{font-size:.78rem;color:#8b93a7;margin:.4rem 0 .6rem}
-.pv-card{border:1px solid #2b3345;border-radius:10px;padding:.8rem;margin-bottom:.6rem;background:#0d1220;cursor:pointer;position:relative}
-.pv-card:hover{border-color:#3b82f6}
-.pv-card.sel{border-color:#3b82f6;box-shadow:0 0 0 1px #3b82f6}
-.pv-card .pv-badge{position:absolute;top:.35rem;right:.45rem;font-size:.68rem;color:#8b93a7;background:#10151f;border:1px solid #2b3345;border-radius:6px;padding:.05rem .35rem;pointer-events:none;opacity:.85}
-.pv-card iframe.snapshot{width:100%;min-height:160px;max-height:320px;border:0;background:#fff;border-radius:6px;display:block}
+.pv-sim{width:100%;min-height:420px;border:1px solid #2b3345;border-radius:10px;background:#fff;display:block}
+#pv-list{margin:.2rem 0 .4rem}
+#page-comments{margin-top:.7rem;padding-top:.6rem;border-top:1px dashed #2b3345}
+#page-comments h4{margin:0 0 .4rem;font-size:.82rem;color:#93c5fd}
+iframe.snapshot{width:100%;min-height:140px;max-height:280px;border:1px solid #2b3345;background:#fff;border-radius:6px;display:block;margin:.35rem 0}
 .pv-page{background:#0a0d14;border:1px solid #2b3345;border-radius:12px;padding:1rem;min-height:180px}
 .pv-page.empty{display:flex;align-items:center;justify-content:center;min-height:140px}
 .pv-toolbar{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin:.5rem 0 .7rem}
@@ -117,7 +117,6 @@ iframe.preview{width:100%;height:220px;border:1px solid #2b3345;border-radius:6p
 .mv-select{display:none;width:100%;margin-top:.35rem}
 @media(max-width:860px){ .mv-arrows{display:none} .mv-select{display:block} }
 .prio-num{width:4.2rem}
-.pv-card h3{margin:0 0 .3rem}
 /* ===== diagrama de tabelas ===== */
 #diagram{position:relative;display:flex;flex-wrap:wrap;gap:.7rem;padding:.4rem}
 #wires{position:absolute;inset:0;pointer-events:none;z-index:0}
@@ -791,7 +790,7 @@ let PvSelected=null;
 function applyPages(kind,tid,action,payload,actor){
   const d=CACHE[FILES.pages]; payload=payload||{};
   if(kind==='page'){
-    if(action==='create'){ if(d.pages.length>=200) throw new Error('limite de paginas'); const clean=validatePage(payload); const embedded=clean.elements||[]; delete clean.elements; const now=new Date().toISOString(); const pg={id:vId(payload.id||uid('p')),...clean,elements:embedded,updatedBy:actor,updatedAt:now}; d.pages.push(pg); spawnImpliedTasksUI(pg,actor,{tab:'pages',kind:'page'}); return pg; }
+    if(action==='create'){ if(d.pages.length>=200) throw new Error('limite de paginas'); const clean=validatePage(payload); const embedded=clean.elements||[]; delete clean.elements; const now=new Date().toISOString(); const pg={id:vId(payload.id||uid('p')),...clean,elements:embedded,comments:[],updatedBy:actor,updatedAt:now}; d.pages.push(pg); spawnImpliedTasksUI(pg,actor,{tab:'pages',kind:'page'}); return pg; }
     const pg=d.pages.find(p=>p.id===tid); if(!pg) throw new Error('pagina nao encontrada');
     if(action==='update'){ const clean=validatePage(payload,true); for(const k of Object.keys(clean)) if(k in payload) pg[k]=clean[k]; pg.updatedBy=actor; pg.updatedAt=new Date().toISOString(); spawnImpliedTasksUI(pg,actor,{tab:'pages',kind:'page'}); return pg; }
     if(action==='delete'){ d.pages=d.pages.filter(p=>p.id!==tid); if(OPEN_PAGE===tid){ OPEN_PAGE=null; PvSelected=null; } return {deleted:tid}; }
@@ -808,10 +807,16 @@ function applyPages(kind,tid,action,payload,actor){
   }
   if(kind==='page-comment'){
     if(action!=='comment') throw new Error('comentarios usam acao comment');
-    const el=findEl(payload.elementId||payload.element_id||tid);
-    if(el.comments.length>=200) throw new Error('limite de comentarios');
+    const elId=payload.elementId||payload.element_id;
+    const pageId=payload.pageId||payload.page_id;
+    let holder=null;
+    if(elId) holder=findEl(elId);
+    else if(pageId){ holder=d.pages.find(p=>p.id===pageId); if(!holder) throw new Error('pagina nao encontrada'); }
+    else { try{ holder=findEl(tid); }catch(_){ holder=d.pages.find(p=>p.id===tid); } if(!holder) throw new Error('alvo de comentario invalido'); }
+    holder.comments=holder.comments||[];
+    if(holder.comments.length>=200) throw new Error('limite de comentarios');
     const c={id:vId(payload.id||uid('c')),author:vStr(payload.author,'author',120,false)||actor,text:vStr(payload.text,'text',2000),createdAt:new Date().toISOString()};
-    el.comments.push(c); el.updatedBy=actor; el.updatedAt=new Date().toISOString(); return c;
+    holder.comments.push(c); holder.updatedBy=actor; holder.updatedAt=new Date().toISOString(); return c;
   }
   throw new Error('alvo invalido');
 }
@@ -869,45 +874,134 @@ function pvBlockVisual(el){
   if(el.snapshotHtml) return `<iframe class="snapshot" sandbox="" loading="lazy" srcdoc="${esc(el.snapshotHtml)}" title="${esc(el.label||'elemento')}"></iframe>`;
   return pvRender(el);
 }
-function renderPageDetail(){
-  const host=$('page-detail');
-  const pg=CACHE[FILES.pages].pages.find(p=>p.id===OPEN_PAGE);
-  if(!pg){ host.innerHTML=''; return; }
-  const ordered=pageOrdered(pg);
-  const selId=PvSelected && ordered.some(e=>e.id===PvSelected) ? PvSelected : null;
-  const sel=selId ? ordered.find(e=>e.id===selId) : null;
-  const canvas=ordered.length
-    ? ordered.map(e=>`<div class="pv-card${e.id===PvSelected?' sel':''}" data-pv="${esc(e.id)}" data-el-label="${esc(e.label||e.type)}"><span class="pv-badge">${esc(e.type||'texto')}${e.snapshotHtml?' · design':''}</span>${pvBlockVisual(e)}</div>`).join('')
-    : `<div class="pv-page empty"><span class="muted">Sem elementos ainda. Adicione abaixo ou aguarde proposta do agente com <code>elements</code>.</span></div>`;
-  const commentsHtml=sel ? `
-  <div id="pv-comments" data-for="${esc(sel.id)}">
+/* ===== simulação: página final composta em um único iframe ===== */
+let PvSim=null;
+function simBlockInner(el){
+  if(!el.snapshotHtml) return pvRender(el);
+  const bm=el.snapshotHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  return bm?bm[1]:el.snapshotHtml;
+}
+function buildSimDoc(ordered){
+  let css='', links='';
+  const blocks=ordered.map(e=>{
+    let inner;
+    if(e.snapshotHtml){
+      inner=simBlockInner(e);
+      const styles=e.snapshotHtml.match(/<style[^>]*>[\s\S]*?<\/style>/gi)||[];
+      for(const m of styles){ const c=m.match(/<style[^>]*>([\s\S]*?)<\/style>/i); if(c) css+='\n'+c[1]; }
+      const ls=e.snapshotHtml.match(/<link\b[^>]*rel=["']stylesheet["'][^>]*>/gi)||[];
+      for(const l of ls) links+='\n'+l;
+    } else inner=pvRender(e);
+    return `<div class="sim-block" data-sim-id="${esc(e.id)}">${inner}</div>`;
+  }).join('\n');
+  const base='html,body{margin:0;padding:0;background:#fff;color:#111;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}'+
+    '\n.sim-block{position:relative;cursor:pointer;box-sizing:border-box;padding:.4rem .55rem}'+
+    '\n.sim-block:hover{outline:2px dashed rgba(37,99,235,.5);outline-offset:-2px}'+
+    '\n.sim-block.sim-selected{outline:2px solid #2563eb;outline-offset:-2px;background:rgba(37,99,235,.06)}';
+  const bridge=`<script>(function(){
+document.addEventListener('click',function(ev){var t=ev.target;var b=t&&t.closest?t.closest('[data-sim-id]'):null;if(b){try{parent.postMessage({sim:'select',id:b.getAttribute('data-sim-id')},'*');}catch(e){}}var a=t&&t.closest?t.closest('a'):null;if(a)ev.preventDefault();},true);
+window.addEventListener('message',function(ev){var d=ev.data||{};if(d.sim!=='select'||!d.id)return;var all=document.querySelectorAll('.sim-block');for(var i=0;i<all.length;i++)all[i].classList.remove('sim-selected');var n=document.querySelector('[data-sim-id="'+d.id+'"]');if(n)n.classList.add('sim-selected');});
+function report(){try{var h=Math.max(document.body?document.body.scrollHeight:0,document.documentElement.scrollHeight,320);parent.postMessage({sim:'height',h:h},'*');}catch(e){}}
+window.addEventListener('load',report);setTimeout(report,80);setTimeout(report,500);
+})();<\/script>`;
+  return '<!doctype html><html><head><meta charset="utf-8"><style>'+base+css+'</style>'+links+'</head><body>'+blocks+bridge+'</body></html>';
+}
+function pvCommentsHtml(pg, sel){
+  if(!sel) return `<div id="pv-comments"><p class="pv-hint">Clique num bloco da simulação (ou em "ver/comentar") para selecionar e comentar como revisor. A página final é montada na ordem dos elementos, usando o <span class="mono">snapshotHtml</span> do editor visual quando existir.</p></div>`;
+  return `<div id="pv-comments" data-for="${esc(sel.id)}">
     <h4>Comentar «${esc(sel.label||sel.type)}» <span class="muted">(${(sel.comments||[]).length})</span></h4>
     ${(sel.comments||[]).map(c=>`<div class="comment"><div class="who">${esc(c.author)} · ${esc(fmtDate(c.createdAt))}</div><div class="txt">${esc(c.text)}</div></div>`).join('')||'<div class="muted" style="margin:.2rem 0 .4rem">Nenhum comentário ainda.</div>'}
     <div class="row" style="margin-top:.4rem"><input type="text" data-c-author="${esc(sel.id)}" class="grow" placeholder="seu nome" maxlength="120" value="você"><input type="text" data-c-text="${esc(sel.id)}" class="grow" placeholder="Comentar neste elemento..." maxlength="2000"><button class="sm" data-c-send="${esc(sel.id)}">Comentar</button></div>
     <div class="row" style="margin-top:.4rem"><button class="ghost sm" data-edit-el2="${esc(sel.id)}">editar</button><button class="ghost sm" data-visual="${esc(sel.id)}">editor visual</button><button class="danger sm" data-del-el2="${esc(sel.id)}">excluir</button></div>
-  </div>` : `<div id="pv-comments"><p class="pv-hint">Clique num bloco da prévia para selecionar e comentar como revisor. A prévia usa a última versão (<span class="mono">snapshotHtml</span> do editor visual) quando existir; senão renderiza o elemento estruturado.</p></div>`;
-  host.innerHTML=`<div class="card"><h2>${esc(pg.name)}</h2>
-  <div class="pv-toolbar"><span class="route">${esc(pg.route||'sem rota')}</span><span class="muted">${ordered.length} elemento(s) · última versão</span><span style="flex:1"></span><span class="muted">${esc((pg.desc||'').slice(0,160))}</span></div>
-  <div id="pv-list" class="pv-page">${canvas}</div>
-  ${commentsHtml}
-  <details ${ordered.length?'':'open'} style="margin-top:.7rem"><summary>Gerenciar elementos (${ordered.length})</summary>
-  ${ordered.map(e=>`<div class="task"><div class="t">[${esc(e.type)}] ${esc(e.label)} <span class="muted">ordem ${Number(e.order)||0}${e.snapshotHtml?' · tem design':''}</span></div><div class="muted" style="white-space:pre-wrap">${esc((e.content||'').slice(0,300))}</div>
+  </div>`;
+}
+function pageCommentsHtml(pg){
+  const list=(pg.comments||[]);
+  return `<div id="page-comments" data-page="${esc(pg.id)}">
+    <h4>Comentário sobre o resultado final <span class="muted">(${list.length})</span></h4>
+    ${list.map(c=>`<div class="comment"><div class="who">${esc(c.author)} · ${esc(fmtDate(c.createdAt))}</div><div class="txt">${esc(c.text)}</div></div>`).join('')||'<div class="muted" style="margin:.2rem 0 .4rem">Nenhum comentário na página ainda.</div>'}
+    <div class="row" style="margin-top:.4rem"><input type="text" data-pc-author class="grow" placeholder="seu nome" maxlength="120" value="você"><input type="text" data-pc-text class="grow" placeholder="Comentar o resultado final desta página..." maxlength="2000"><button class="sm" data-pc-send="${esc(pg.id)}">Comentar página</button></div>
+  </div>`;
+}
+function bindPvSection(host){
+  host.querySelectorAll('[data-c-send]').forEach(b=>b.onclick=()=>sendComment(b.dataset.cSend));
+  host.querySelectorAll('[data-pc-send]').forEach(b=>b.onclick=()=>sendPageComment(b.dataset.pcSend));
+}
+function pvSelect(id, postSim){
+  const pg=CACHE[FILES.pages].pages.find(p=>p.id===OPEN_PAGE); if(!pg) return;
+  const ordered=pageOrdered(pg);
+  const sel=ordered.find(e=>e.id===id)||null;
+  PvSelected=sel?id:null;
+  const host=$('page-detail');
+  const slot=host.querySelector('#pd-comments');
+  if(slot){ slot.innerHTML=pvCommentsHtml(pg,sel)+pageCommentsHtml(pg); bindPvSection(host); }
+  if(postSim!==false&&sel){
+    const f=host.querySelector('#pv-list iframe');
+    if(f){ try{ f.contentWindow.postMessage({sim:'select',id},'*'); }catch(e){} }
+  }
+  if(sel){ const inp=host.querySelector(`[data-c-text="${id}"]`); if(inp) inp.focus(); }
+}
+function renderPageDetail(){
+  const host=$('page-detail');
+  const pg=CACHE[FILES.pages].pages.find(p=>p.id===OPEN_PAGE);
+  if(!pg){ host.innerHTML=''; PvSim=null; return; }
+  if(!host.querySelector('#pd-card')){
+    host.innerHTML=`<div class="card" id="pd-card"><div id="pd-head"></div><div id="pv-list"></div><div id="pd-comments"></div><div id="pd-manage"></div><div id="pd-form"></div></div>`;
+  }
+  const ordered=pageOrdered(pg);
+  if(PvSelected&&!ordered.some(e=>e.id===PvSelected)) PvSelected=null;
+  const sel=PvSelected?ordered.find(e=>e.id===PvSelected):null;
+  host.querySelector('#pd-head').innerHTML=`<h2>${esc(pg.name)}</h2>
+  <div class="pv-toolbar"><span class="route">${esc(pg.route||'sem rota')}</span><span class="muted">${ordered.length} elemento(s) · simulação da página final</span><span style="flex:1"></span><span class="muted">${esc((pg.desc||'').slice(0,160))}</span></div>`;
+  const list=host.querySelector('#pv-list');
+  if(!ordered.length){
+    PvSim=null;
+    list.innerHTML=`<div class="pv-page empty"><span class="muted">Sem elementos ainda. Adicione abaixo ou aguarde proposta do agente com <code>elements</code>.</span></div>`;
+  } else {
+    const doc=buildSimDoc(ordered);
+    const reuse=PvSim&&PvSim.pageId===pg.id&&PvSim.doc===doc&&PvSim.node&&PvSim.node.parentNode===list;
+    if(!reuse){
+      list.innerHTML='';
+      const node=document.createElement('iframe');
+      node.className='pv-sim';
+      node.setAttribute('sandbox','allow-scripts');
+      node.title='Simulação: '+(pg.name||'página');
+      node.srcdoc=doc;
+      node.onload=()=>{ if(PvSelected){ try{ node.contentWindow.postMessage({sim:'select',id:PvSelected},'*'); }catch(e){} } };
+      list.appendChild(node);
+      PvSim={pageId:pg.id,doc,node};
+    } else if(PvSelected){
+      try{ PvSim.node.contentWindow.postMessage({sim:'select',id:PvSelected},'*'); }catch(e){}
+    }
+  }
+  host.querySelector('#pd-comments').innerHTML=pvCommentsHtml(pg,sel)+pageCommentsHtml(pg);
+  host.querySelector('#pd-manage').innerHTML=`<details ${ordered.length?'':'open'} style="margin-top:.7rem"><summary>Gerenciar elementos (${ordered.length})</summary>
+  ${ordered.map(e=>`<div class="task"><div class="t">[${esc(e.type)}] ${esc(e.label)} <span class="muted">ordem ${Number(e.order)||0}${e.snapshotHtml?' · tem design':''}</span></div>${e.snapshotHtml?pvBlockVisual(e):`<div class="muted" style="white-space:pre-wrap">${esc((e.content||'').slice(0,300))}</div>`}
   <div class="row" style="margin-top:.35rem"><button class="ghost sm" data-edit-el2="${esc(e.id)}">editar</button><button class="ghost sm" data-visual="${esc(e.id)}">editor visual</button><button class="ghost sm" data-pv="${esc(e.id)}">ver/comentar</button><button class="danger sm" data-del-el2="${esc(e.id)}">x</button></div></div>`).join('')||'<span class="muted">Sem elementos.</span>'}
-  </details>
-  <h3>Novo elemento</h3><div class="row"><select id="e-type">${ENUMS.ptype.map(t=>`<option>${t}</option>`).join('')}</select><input type="text" id="e-label" class="grow" placeholder="Rótulo (até 200)" maxlength="200"><input type="text" id="e-content" class="grow" placeholder="Conteúdo/descrição (até 20000)" maxlength="20000"><input type="number" id="e-order" class="grow" placeholder="ordem" value="${ordered.length}" min="0" style="max-width:5rem" title="ordem na pilha visual"><button id="e-add">Adicionar</button></div></div>`;
-  host.querySelectorAll('[data-pv]').forEach(c=>c.onclick=()=>{
-    PvSelected=c.dataset.pv;
-    renderPageDetail();
-    const card=host.querySelector(`.pv-card[data-pv="${CSS.escape(PvSelected)}"]`);
-    if(card){ card.classList.add('sel'); card.scrollIntoView({block:'nearest',behavior:'smooth'}); }
-    const inp=host.querySelector(`[data-c-text="${PvSelected}"]`);
-    if(inp) inp.focus();
-  });
+  </details>`;
+  host.querySelector('#pd-form').innerHTML=`<h3>Novo elemento</h3><div class="row"><select id="e-type">${ENUMS.ptype.map(t=>`<option>${t}</option>`).join('')}</select><input type="text" id="e-label" class="grow" placeholder="Rótulo (até 200)" maxlength="200"><input type="text" id="e-content" class="grow" placeholder="Conteúdo/descrição (até 20000)" maxlength="20000"><input type="number" id="e-order" class="grow" placeholder="ordem" value="${ordered.length}" min="0" style="max-width:5rem" title="ordem na pilha visual"><button id="e-add">Adicionar</button></div>`;
+  host.querySelectorAll('[data-pv]').forEach(b=>b.onclick=()=>pvSelect(b.dataset.pv,true));
   host.querySelectorAll('[data-edit-el2]').forEach(b=>b.onclick=()=>editPageElement(b.dataset.editEl2));
   host.querySelectorAll('[data-del-el2]').forEach(b=>b.onclick=()=>delPageElement(b.dataset.delEl2));
-  host.querySelectorAll('[data-c-send]').forEach(b=>b.onclick=()=>sendComment(b.dataset.cSend));
   host.querySelectorAll('[data-visual]').forEach(b=>b.onclick=()=>openVisualEditor(b.dataset.visual));
+  bindPvSection(host);
   $('e-add').onclick=addPageElement;
+}
+window.addEventListener('message',ev=>{
+  const f=document.querySelector('#pv-list iframe');
+  if(!f||ev.source!==f.contentWindow) return;
+  const d=ev.data||{};
+  if(d.sim==='height'&&typeof d.h==='number'){ f.style.height=Math.max(420,d.h+12)+'px'; return; }
+  if(d.sim==='select'&&typeof d.id==='string'&&d.id!==PvSelected) pvSelect(d.id,true);
+});
+async function sendPageComment(pid){
+  const host=$('page-detail');
+  const box=host.querySelector('#page-comments');
+  if(!box) return;
+  const author=(box.querySelector('[data-pc-author]').value||'').trim()||'você';
+  const text=(box.querySelector('[data-pc-text]').value||'').trim();
+  if(!text){ msg('Escreva o comentário antes de enviar.',false); return; }
+  try{ applyChange('pages','page-comment',pid,'comment',{pageId:pid,author,text},'user'); await saveTabFile('pages'); renderAll(); msg('Comentário no resultado final adicionado.',true);}catch(e){msg('Erro: '+e.message,false);}
 }
 async function addPageElement(){
   try{ applyChange('pages','page-element',null,'create',{pageId:OPEN_PAGE,type:$('e-type').value,label:$('e-label').value,content:$('e-content').value,order:parseInt($('e-order').value,10)||0},'user'); await saveTabFile('pages'); renderAll(); msg('Elemento adicionado.',true);}catch(e){msg('Erro: '+e.message,false);}

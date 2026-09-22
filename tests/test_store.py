@@ -153,6 +153,35 @@ def test_pages_comments(root):
     assert c2["id"]
 
 
+def test_page_level_comment_on_final_result(root):
+    """Comentário no RESULTADO FINAL da página (pageId), não no elemento."""
+    pg = store.user_action(root, PROJ, "pages", "page", None, "create",
+                           {"name": "Home", "route": "/"})
+    assert pg["comments"] == []
+    c = store.user_action(root, PROJ, "pages", "page-comment", pg["id"], "comment",
+                          {"pageId": pg["id"], "author": "você",
+                           "text": "banner muito alto no topo"})
+    assert c["text"] == "banner muito alto no topo"
+    got = store.load_data(root, PROJ, store.PAGES_FILE)
+    assert got["pages"][0]["comments"][0]["text"] == "banner muito alto no topo"
+    # sem elementId: target_id sendo o id da página também resolve
+    c2 = store.user_action(root, PROJ, "pages", "page-comment", pg["id"], "comment",
+                           {"pageId": pg["id"], "text": "ok"})
+    assert c2["id"]
+    assert len(got["pages"][0]["comments"]) == 1  # dado antigo ainda não recarregado
+    got2 = store.load_data(root, PROJ, store.PAGES_FILE)
+    assert len(got2["pages"][0]["comments"]) == 2
+    # proposta de agente comentando a página passa no dry-run e fica pending
+    prop = store.propose(root, PROJ, "pages", "page-comment", pg["id"], "comment",
+                         {"pageId": pg["id"], "text": "CTA principal deveria ser verde"},
+                         reason="feedback no resultado final da Home")
+    assert prop["status"] == "pending"
+    # página inexistente com pageId explícito → erro claro
+    with pytest.raises(ValueError, match="pagina nao encontrada"):
+        store.user_action(root, PROJ, "pages", "page-comment", pg["id"], "comment",
+                          {"pageId": "p-que-nao-existe", "text": "x"})
+
+
 def test_tables_fk(root):
     users = store.user_action(root, PROJ, "tables", "table", None, "create", {"name": "users"})
     store.user_action(root, PROJ, "tables", "table-column", None, "create",

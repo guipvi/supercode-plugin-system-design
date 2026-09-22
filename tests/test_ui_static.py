@@ -136,3 +136,17 @@ def test_page_preview_uses_latest_and_comments():
     assert "data-c-send=" in html
     assert "PvSelected" in html
     assert "validateEmbeddedElements" in html
+
+
+def test_page_simulation_and_page_level_comments():
+    html = read_ui()
+    # simulação da página final: iframe único monta os elementos na ordem
+    assert "function buildSimDoc(" in html
+    assert "'allow-scripts'" in html or '"allow-scripts"' in html
+    assert "sim-block" in html
+    assert "postMessage" in html
+    # comentário no resultado final da página (pageId), além do elemento
+    assert "function sendPageComment(" in html
+    assert "data-pc-send=" in html
+    assert "pageCommentsHtml" in html
+    assert "{pageId:pid,author,text}" in html
