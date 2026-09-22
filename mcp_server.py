@@ -109,6 +109,11 @@ if mcp is not None:
         caracteres reais (responsabilidades, regras, onde vive no repo);
         `concept-vision` exige ao menos 1 campo preenchido. Nunca proponha
         titulo + referencia solta.
+        CONCEITO IMPLICA TAREFAS: `concept-element` em `create` exige
+        `tasks` ([{title, desc?, priority?, status?}], ao menos 1) — aprovar
+        o conceito cria as tasks na sprint (sem carta separada). `status`
+        pode vir `done` com evidencia quando o repo ja executa. Nunca
+        proponha sprint-task avulsa para trabalho de um conceito.
         Args:
             project: id do projeto. tab: concept|sprint|pages|tables.
             target_kind: concept-element|sprint-task|page|page-element|page-comment|table|table-column|relation.

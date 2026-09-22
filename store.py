@@ -207,14 +207,37 @@ def list_projects(root=None):
 
 # ------------------------------------------------------------------ conceitos
 
+def validate_task_brief(item):
+    """Uma tarefa implicada no conceito: {title, desc?, priority?}."""
+    if not isinstance(item, dict):
+        raise ValueError("tarefa implicada invalida")
+    return {
+        "title": _check_str(item.get("title"), "task.title", MAX_TITLE),
+        "desc": _check_str(item.get("desc"), "task.desc", MAX_DESC, required=False),
+        "priority": _check_enum(item.get("priority"), "task.priority", PRIORITIES, required=False, default="media"),
+        "status": _check_enum(item.get("status"), "task.status", STATUSES, required=False, default="backlog"),
+    }
+
+
 def validate_concept_element(payload, partial=False):
     req = (not partial)
-    return {
+    out = {
         "kind": _check_enum(payload.get("kind"), "kind", CONCEPT_KINDS, required=req, default="interface"),
         "title": _check_str(payload.get("title"), "title", MAX_TITLE, required=req),
         "description": _check_str(payload.get("description"), "description", MAX_DESC, required=False),
         "details": _check_str(payload.get("details"), "details", MAX_DETAILS, required=False),
     }
+    if "tasks" in (payload or {}):
+        raw = payload.get("tasks")
+        if raw is None:
+            out["tasks"] = []
+        elif not isinstance(raw, list):
+            raise ValueError("'tasks' deve ser uma lista")
+        else:
+            out["tasks"] = [validate_task_brief(x) for x in raw]
+    elif req:
+        out["tasks"] = []
+    return out
 
 
 def apply_concept(data, target_id, action, payload, actor):
@@ -707,6 +730,17 @@ def _check_not_generic(tab, target_kind, action, payload):
         spec = RICH_FIELDS[(tab, target_kind)]
     else:
         return
+    if (tab, target_kind) == ("concept", "concept-element") and action == "create":
+        briefs = (payload or {}).get("tasks")
+        if (not isinstance(briefs, list) or not [
+                x for x in briefs
+                if isinstance(x, dict) and str(x.get("title", "")).strip()]):
+            raise ValueError(
+                "conceito implica tarefas: concept-element.create do agente exige "
+                "'tasks' com ao menos 1 tarefa {title, desc?, priority?, status?} "
+                "descrevendo o trabalho que o conceito demanda (status pode vir "
+                "'done' com evidencia quando o repo ja executa). Tarefa avulsa "
+                "separada nao entra no inbox: embuta no conceito.")
     payload = payload or {}
     for field, minimum in spec:
         value = payload.get(field)
@@ -798,6 +832,41 @@ def _dry_run(root, project, tab, target_kind, target_id, action, payload):
     raise ValueError(f"tab invalida: {tab!r}")
 
 
+def _spawn_implied_tasks(root, project, element, actor):
+    """Aprovar conceito = aprovar o pacote: cria as sprint tasks embutidas.
+
+    Idempotente por titulo (re-aprovacao ou update repetido nao duplica).
+    Retorna a lista criada (pode ser vazia).
+    """
+    wanted = (element or {}).get("tasks") or []
+    if not wanted:
+        return []
+    data = load_data(root, project, SPRINT_FILE)
+    tasks = data.setdefault("tasks", [])
+    existing = {str(x.get("title", "")).strip().lower() for x in tasks}
+    created = []
+    for item in wanted:
+        title = str(item.get("title", "")).strip()
+        if not title or title.lower() in existing:
+            continue
+        now = utcnow()
+        tasks.append({
+            "id": _new_id("t"),
+            "title": title[:MAX_TITLE],
+            "desc": str(item.get("desc", "") or "")[:MAX_DESC],
+            "priority": item.get("priority") if item.get("priority") in PRIORITIES else "media",
+            "status": item.get("status") if item.get("status") in STATUSES else "backlog",
+            "locked": False, "lockedBy": None, "lockedAt": None,
+            "createdBy": f"{actor}:conceito",
+            "createdAt": now, "updatedBy": actor, "updatedAt": now,
+        })
+        existing.add(title.lower())
+        created.append(tasks[-1])
+    if created:
+        save_data(root, project, SPRINT_FILE, data)
+    return created
+
+
 def decide(root, project, proposal_id, approve, by="user"):
     """Aprova (aplica) ou rejeita uma proposta. Só o usuário decide (UI)."""
     validate_entity_id(proposal_id, "proposalId")
@@ -825,11 +894,18 @@ def decide(root, project, proposal_id, approve, by="user"):
     data = load_data(root, project, file_map[tab])
     result = _apply_decision(data, proposal)
     save_data(root, project, file_map[tab], data)
+    spawned = []
+    if (tab == "concept" and proposal.get("targetKind") == "concept-element"
+            and proposal.get("action") in ("create", "update")
+            and isinstance(result, dict) and result.get("id") and "title" in result):
+        spawned = _spawn_implied_tasks(root, project, result, "agent-aprovado")
     proposal["status"] = "approved"
     proposal["decidedAt"] = utcnow()
     proposal["applied"] = result
+    proposal["spawnedTasks"] = [x["id"] for x in spawned]
     save_data(root, project, PROPOSALS_FILE, props)
-    return {"status": "approved", "proposal": proposal, "result": result}
+    return {"status": "approved", "proposal": proposal, "result": result,
+            "spawnedTasks": spawned}
 
 
 def _apply_decision(data, proposal):
@@ -864,6 +940,10 @@ def user_action(root, project, tab, target_kind, target_id, action, payload):
             result = apply_vision(data, payload, "user")
         elif target_kind == "concept-element":
             result = apply_concept(data, target_id, action, payload, "user")
+            if action in ("create", "update") and isinstance(result, dict) and result.get("id") and "title" in result:
+                save_data(root, project, file_map[tab], data)
+                _spawn_implied_tasks(root, project, result, "user")
+                data = load_data(root, project, file_map[tab])
         else:
             raise ValueError(f"alvo invalido para conceito: {target_kind!r}")
     elif tab == "sprint":

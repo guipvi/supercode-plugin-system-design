@@ -153,6 +153,7 @@ iframe.preview{width:100%;height:220px;border:1px solid #2b3345;border-radius:6p
       </div>
       <label>Descrição<textarea id="n-desc" maxlength="5000" placeholder="O que é / para que serve"></textarea></label>
       <label>Detalhes<textarea id="n-details" maxlength="20000" placeholder="Comportamento, regras, algoritmo, pseudo-código..."></textarea></label>
+      <label>Tarefas implicadas <span class="hint">(uma por linha: Título | descrição | backlog/doing/done — nascem junto ao aprovar)</span><textarea id="n-tasks" placeholder="Ex.: Implementar checkout | fluxo ponta a ponta | backlog"></textarea></label>
     </div>
     <button id="btn-add-element">Adicionar elemento</button>
   </div>
@@ -313,8 +314,10 @@ function describeProposal(p){
   if(kind==='concept-vision') return {glance:'Visão do sistema atualizada', why:p.reason||'Direção do produto: objetivo, público, escopo e não-objetivos.'};
   if(kind==='concept-element'){
     const t=first('title','name');
-    if(act==='create') return {glance:`Novo elemento: ${t||'(sem título)'}`, why:`${pl.kind||'elemento'} · ${first('description','desc','ref')||p.reason||''}`.slice(0,220)};
-    if(act==='update') return {glance:`Ajustar elemento: ${t||p.targetId||''}`, why:(p.reason||'Mudança proposta pelo chat.').slice(0,220)};
+    const tk=Array.isArray(pl.tasks)?pl.tasks.filter(x=>x&&x.title):[];
+    const tkTxt=tk.length?` 📋 ${tk.length} tarefa(s) incluída(s): ${tk.map(x=>x.title+(x.status&&x.status!=='backlog'?' ('+x.status+')':'')).join('; ').slice(0,140)}`:'';
+    if(act==='create') return {glance:`Novo elemento: ${t||'(sem título)'}`, why:`${pl.kind||'elemento'} · ${first('description','desc','ref')||p.reason||''}${tkTxt}`.slice(0,320)};
+    if(act==='update'){ const tkU=Array.isArray(pl.tasks)?pl.tasks.filter(x=>x&&x.title):[]; return {glance:`Ajustar elemento: ${t||p.targetId||''}`, why:((p.reason||'Mudança proposta pelo chat.')+(tkU.length?` 📋 tarefas: ${tkU.map(x=>x.title).join('; ').slice(0,120)}`:'')).slice(0,320)}; }
     return {glance:`Remover elemento: ${t||p.targetId||''}`, why:(p.reason||'').slice(0,220)};
   }
   if(kind==='sprint-task'){
@@ -406,6 +409,7 @@ async function decideProposal(id,approve){
     if(tgt&&tgt.locked) throw new Error('alvo travado: destrave para aprovar');
     applyChange(p.tab,p.targetKind,p.targetId,p.action,p.payload||{},'agent-aprovado');
     await saveTabFile(p.tab);
+    await saveSprintIfDirty();
     p.status='approved'; p.decidedAt=new Date().toISOString();
     await saveFile(FILES.proposals,props);
     renderAll(); msg('Proposta aprovada e aplicada.',true);
@@ -420,11 +424,11 @@ function applyChange(tab,kind,tid,action,payload,actor){
     const d=CACHE[FILES.concept];
     if(kind==='concept-vision'){ for(const k of ['objective','audience','scope','nonGoals']) if(k in payload) d.vision[k]=vStr(payload[k],k,5000,false); d.visionUpdatedBy=actor; d.visionUpdatedAt=new Date().toISOString(); return d.vision; }
     const els=d.elements;
-    if(action==='create'){ if(els.length>=500) throw new Error('limite de elementos'); const el={id:vId(payload.id||uid('e')),kind:vEnum(payload.kind,'kind',ENUMS.kind,'interface'),title:vStr(payload.title,'title',200),description:vStr(payload.description,'description',5000,false),details:vStr(payload.details,'details',20000,false),locked:false,lockedBy:null,lockedAt:null,updatedBy:actor,updatedAt:new Date().toISOString()}; els.push(el); return el; }
+    if(action==='create'){ if(els.length>=500) throw new Error('limite de elementos'); const el={id:vId(payload.id||uid('e')),kind:vEnum(payload.kind,'kind',ENUMS.kind,'interface'),title:vStr(payload.title,'title',200),description:vStr(payload.description,'description',5000,false),details:vStr(payload.details,'details',20000,false),tasks:Array.isArray(payload.tasks)?payload.tasks.map(vTaskBrief):[],locked:false,lockedBy:null,lockedAt:null,updatedBy:actor,updatedAt:new Date().toISOString()}; els.push(el); spawnImpliedTasksUI(el,actor); return el; }
     const it=els.find(e=>e.id===tid); if(!it) throw new Error('elemento nao encontrado');
     if(actor!=='user'&&!actor.startsWith('agent-aprovado')&&it.locked) throw new Error('elemento bloqueado');
     if(actor==='agent'&&it.locked) throw new Error('elemento bloqueado');
-    if(action==='update'){ if('kind' in payload) it.kind=vEnum(payload.kind,'kind',ENUMS.kind); if('title' in payload) it.title=vStr(payload.title,'title',200); if('description' in payload) it.description=vStr(payload.description,'description',5000,false); if('details' in payload) it.details=vStr(payload.details,'details',20000,false); it.updatedBy=actor; it.updatedAt=new Date().toISOString(); return it; }
+    if(action==='update'){ if('kind' in payload) it.kind=vEnum(payload.kind,'kind',ENUMS.kind); if('title' in payload) it.title=vStr(payload.title,'title',200); if('description' in payload) it.description=vStr(payload.description,'description',5000,false); if('details' in payload) it.details=vStr(payload.details,'details',20000,false); if('tasks' in payload) it.tasks=Array.isArray(payload.tasks)?payload.tasks.map(vTaskBrief):[]; it.updatedBy=actor; it.updatedAt=new Date().toISOString(); spawnImpliedTasksUI(it,actor); return it; }
     if(action==='delete'){ d.elements=els.filter(e=>e.id!==tid); return {deleted:tid}; }
     throw new Error('acao invalida');
   }
@@ -442,6 +446,27 @@ function applyChange(tab,kind,tid,action,payload,actor){
   throw new Error('tab invalida');
 }
 function vId(id){ if(!ID_RE.test(id)) throw new Error('id invalido'); return id; }
+let SPRINT_DIRTY=false;
+function vTaskBrief(it){ if(!it||typeof it!=='object') throw new Error('tarefa implicada invalida'); return {title:vStr(it.title,'task.title',200),desc:vStr(it.desc,'task.desc',5000,false),priority:vEnum(it.priority,'task.priority',ENUMS.priority,'media'),status:vEnum(it.status,'task.status',ENUMS.status,'backlog')}; }
+function parseTaskLines(txt){ return String(txt||'').split('\n').map(s=>s.trim()).filter(Boolean).map(line=>{ const parts=line.split('|').map(s=>s.trim()); const st=(parts[2]||'backlog').toLowerCase(); return {title:parts[0],desc:parts[1]||'',status:['backlog','doing','done'].includes(st)?st:'backlog'}; }); }
+/* Aprovar conceito = aprovar o pacote: tarefas embutidas viram sprint (sem carta separada) */
+function spawnImpliedTasksUI(el,actor){
+  const wanted=(el&&el.tasks)||[];
+  if(!wanted.length) return [];
+  const d=CACHE[FILES.sprint]; const tasks=d.tasks||[];
+  const existing=new Set(tasks.map(t=>String(t.title||'').trim().toLowerCase()));
+  const created=[];
+  for(const it of wanted){
+    const title=String(it.title||'').trim();
+    if(!title||existing.has(title.toLowerCase())) continue;
+    const now=new Date().toISOString();
+    tasks.push({id:vId(it.id||uid('t')),title:title.slice(0,200),desc:String(it.desc||'').slice(0,5000),priority:ENUMS.priority.includes(it.priority)?it.priority:'media',status:ENUMS.status.includes(it.status)?it.status:'backlog',locked:false,lockedBy:null,lockedAt:null,createdBy:actor+':conceito',createdAt:now,updatedBy:actor,updatedAt:now});
+    existing.add(title.toLowerCase()); created.push(tasks[tasks.length-1]);
+  }
+  if(created.length) SPRINT_DIRTY=true;
+  return created;
+}
+async function saveSprintIfDirty(){ if(SPRINT_DIRTY){ SPRINT_DIRTY=false; await saveFile(FILES.sprint,CACHE[FILES.sprint]); } }
 
 /* ================= aba: projeto conceitual ================= */
 function renderConcept(){
@@ -832,7 +857,7 @@ $('project').onchange=async e=>{ PROJECT=e.target.value; OPEN_PAGE=null; OPEN_TA
 $('btn-reload').onclick=reloadAll;
 $('f-kind').onchange=renderConcept; $('f-search').oninput=renderConcept;
 $('btn-vision').onclick=async()=>{ try{ applyChange('concept','concept-vision',null,'update',{objective:$('v-objective').value,audience:$('v-audience').value,scope:$('v-scope').value,nonGoals:$('v-nongoals').value},'user'); await saveTabFile('concept'); renderAll(); msg('Visão salva.',true);}catch(e){msg('Erro: '+e.message,false);} };
-$('btn-add-element').onclick=async()=>{ try{ applyChange('concept','concept-element',null,'create',{kind:$('n-kind').value,title:$('n-title').value,description:$('n-desc').value,details:$('n-details').value},'user'); await saveTabFile('concept'); $('n-title').value='';$('n-desc').value='';$('n-details').value=''; renderAll(); msg('Elemento adicionado.',true);}catch(e){msg('Erro: '+e.message,false);} };
+$('btn-add-element').onclick=async()=>{ try{ applyChange('concept','concept-element',null,'create',{kind:$('n-kind').value,title:$('n-title').value,description:$('n-desc').value,details:$('n-details').value,tasks:parseTaskLines($('n-tasks').value)},'user'); await saveTabFile('concept'); await saveSprintIfDirty(); $('n-title').value='';$('n-desc').value='';$('n-details').value='';$('n-tasks').value=''; renderAll(); msg('Elemento adicionado.',true);}catch(e){msg('Erro: '+e.message,false);} };
 $('btn-add-task').onclick=async()=>{ try{ applyChange('sprint','sprint-task',null,'create',{title:$('t-title').value,desc:$('t-desc').value,priority:$('t-priority').value},'user'); await saveTabFile('sprint'); $('t-title').value='';$('t-desc').value=''; renderAll(); msg('Tarefa adicionada ao backlog.',true);}catch(e){msg('Erro: '+e.message,false);} };
 $('btn-add-page').onclick=async()=>{ try{ const pg=applyChange('pages','page',null,'create',{name:$('p-name').value,route:$('p-route').value,desc:$('p-desc').value},'user'); await saveTabFile('pages'); $('p-name').value='';$('p-route').value='';$('p-desc').value=''; OPEN_PAGE=pg.id; renderAll(); msg('Página criada.',true);}catch(e){msg('Erro: '+e.message,false);} };
 $('btn-add-table').onclick=async()=>{ try{ const tb=applyChange('tables','table',null,'create',{name:$('tb-name').value,desc:$('tb-desc').value},'user'); await saveTabFile('tables'); $('tb-name').value='';$('tb-desc').value=''; OPEN_TABLE=tb.id; renderAll(); msg('Tabela criada.',true);}catch(e){msg('Erro: '+e.message,false);} };

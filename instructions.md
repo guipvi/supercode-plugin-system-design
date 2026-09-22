@@ -128,3 +128,18 @@ NUNCA responda de memória: leia na hora `system_design_get` das 4 abas
 exatos: aprovadas aplicadas (por aba), pendentes aguardando avaliação,
 rejeitadas, tarefas por status (backlog/doing/done) e o próximo passo
 concreto. Sem leitura, sem resposta.
+
+## Conceito implica tarefas (pacote único)
+
+Tarefas NÃO vão ao inbox separadas: nascem descritas no conceito.
+
+- `concept-element` em `create` exige `tasks` com ao menos 1 tarefa
+  `{title, desc?, priority?, status?}` — sem isso o propose é rejeitado.
+- `status` pode vir `done` com evidência quando o repo já executa
+  (sistemas existentes): cheque o código antes e cite a evidência no
+  `desc`/`reason` (arquivo, teste, migração).
+- Aprovar o conceito cria as tasks na sprint automaticamente (sem carta
+  separada, sem nova aprovação). Títulos duplicados são ignorados.
+- Nunca proponha `sprint-task` avulsa para trabalho que pertence a um
+  conceito: embuta no elemento (crie o elemento com `tasks`, ou proponha
+  `update` adicionando `tasks` ao elemento aprovado).

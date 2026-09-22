@@ -231,10 +231,45 @@ def test_propose_rejects_generic_concept_element(root):
     with pytest.raises(ValueError, match="generica"):
         store.propose(root, PROJ, "concept", "concept-element", None, "create",
                       {"kind": "interface", "title": "X", "description": "curta"})
+    with pytest.raises(ValueError, match="implica tarefas"):
+        store.propose(root, PROJ, "concept", "concept-element", None, "create",
+                      {"kind": "interface", "title": "Frontend Web",
+                       "description": "Responsavel pelas 26 rotas publicas em client/src com Tailwind"})
     ok = store.propose(root, PROJ, "concept", "concept-element", None, "create",
                        {"kind": "interface", "title": "Frontend Web",
-                        "description": "Responsavel pelas 26 rotas publicas em client/src com Tailwind"})
+                        "description": "Responsavel pelas 26 rotas publicas em client/src com Tailwind",
+                        "tasks": [{"title": "Mapear rotas", "desc": "Listar as 26 rotas wouter"}]})
     assert ok["status"] == "pending"
+
+
+def test_approve_concept_spawns_tasks(root):
+    prop = store.propose(root, PROJ, "concept", "concept-element", None, "create",
+                         {"kind": "function", "title": "Checkout",
+                          "description": "Fluxo de pagamento ponta a ponta no repo",
+                          "tasks": [{"title": "Implementar checkout", "desc": "tRPC + Pagar.me"},
+                                    {"title": "Checkout ja auditado", "desc": "webhooks idempotentes vistos em payouts.ts", "status": "done"}]})
+    out = store.decide(root, PROJ, prop["id"], True)
+    assert [t["id"] for t in out["spawnedTasks"]]
+    tasks = store.load_data(root, PROJ, store.SPRINT_FILE)["tasks"]
+    by_title = {t["title"]: t["status"] for t in tasks}
+    assert by_title["Implementar checkout"] == "backlog"
+    assert by_title["Checkout ja auditado"] == "done"
+
+
+def test_approve_concept_dedupes_tasks(root):
+    prop = store.propose(root, PROJ, "concept", "concept-element", None, "create",
+                         {"kind": "function", "title": "A",
+                          "description": "Descricao longa o suficiente aqui",
+                          "tasks": [{"title": "Mesma tarefa"}]})
+    store.decide(root, PROJ, prop["id"], True)
+    prop2 = store.propose(root, PROJ, "concept", "concept-element", None, "create",
+                          {"kind": "function", "title": "B",
+                           "description": "Outra descricao longa o suficiente",
+                           "tasks": [{"title": "Mesma tarefa"}, {"title": "Nova tarefa"}]})
+    out2 = store.decide(root, PROJ, prop2["id"], True)
+    assert [t["title"] for t in out2["spawnedTasks"]] == ["Nova tarefa"]
+    tasks = store.load_data(root, PROJ, store.SPRINT_FILE)["tasks"]
+    assert len(tasks) == 2
 
 
 def test_propose_rejects_generic_task_page_vision(root):
