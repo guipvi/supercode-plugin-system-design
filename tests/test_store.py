@@ -126,14 +126,14 @@ def test_reject_proposal(root):
 
 def test_sprint_flow(root):
     t = store.user_action(root, PROJ, "sprint", "sprint-task", None, "create",
-                          {"title": "Login", "priority": "alta"})
+                          {"title": "Login", "priority": 9})
     assert t["status"] == "backlog"
     store.user_action(root, PROJ, "sprint", "sprint-task", t["id"], "move", {"status": "doing"})
     assert store.load_data(root, PROJ, store.SPRINT_FILE)["tasks"][0]["status"] == "doing"
     with pytest.raises(ValueError):
         store.user_action(root, PROJ, "sprint", "sprint-task", t["id"], "move", {"status": "qa"})
     # sem travas: progresso via proposta funciona (doing/done)
-    prop = store.propose(root, PROJ, "sprint", "sprint-task", t["id"], "move", {"status": "done"})
+    prop = store.propose(root, PROJ, "sprint", "sprint-task", t["id"], "move", {"status": "executado"})
     assert prop["status"] == "pending"
 
 
@@ -233,13 +233,13 @@ def test_approve_concept_spawns_tasks(root):
                          {"kind": "function", "title": "Checkout",
                           "description": "Fluxo de pagamento ponta a ponta no repo",
                           "tasks": [{"title": "Implementar checkout", "desc": "tRPC + Pagar.me"},
-                                    {"title": "Checkout ja auditado", "desc": "webhooks idempotentes vistos em payouts.ts", "status": "done"}]})
+                                    {"title": "Checkout ja auditado", "desc": "webhooks idempotentes vistos em payouts.ts", "status": "executado"}]})
     out = store.decide(root, PROJ, prop["id"], True)
     assert [t["id"] for t in out["spawnedTasks"]]
     tasks = store.load_data(root, PROJ, store.SPRINT_FILE)["tasks"]
     by_title = {t["title"]: t["status"] for t in tasks}
     assert by_title["Implementar checkout"] == "backlog"
-    assert by_title["Checkout ja auditado"] == "done"
+    assert by_title["Checkout ja auditado"] == "executado"
 
 
 def test_approve_concept_dedupes_tasks(root):
@@ -285,11 +285,11 @@ def test_standalone_tasks_rejected_pages_need_tasks(root):
 def test_approve_table_spawns_with_origin(root):
     prop = store.propose(root, PROJ, "tables", "table", None, "create",
                          {"name": "orders", "desc": "Pedidos do marketplace em geral",
-                          "tasks": [{"title": "Criar migration orders", "status": "done", "desc": "migration 0025"}]})
+                          "tasks": [{"title": "Criar migration orders", "status": "executado", "desc": "migration 0025"}]})
     out = store.decide(root, PROJ, prop["id"], True)
     assert len(out["spawnedTasks"]) == 1
     t = store.load_data(root, PROJ, store.SPRINT_FILE)["tasks"][0]
-    assert (t["title"], t["status"]) == ("Criar migration orders", "done")
+    assert (t["title"], t["status"]) == ("Criar migration orders", "executado")
     assert t["origin"] == {"tab": "tables", "kind": "table", "id": t["origin"]["id"], "title": "orders"}
 
 
@@ -297,3 +297,51 @@ def test_user_direct_create_stays_free(root):
     el = store.user_action(root, PROJ, "concept", "concept-element", None, "create",
                            {"kind": "interface", "title": "Rascunho"})
     assert el["id"]
+
+
+def test_priority_int_range(root):
+    with pytest.raises(ValueError, match="1 a 10"):
+        store.user_action(root, PROJ, "sprint", "sprint-task", None, "create",
+                          {"title": "X", "priority": 11})
+    with pytest.raises(ValueError, match="1 a 10"):
+        store.user_action(root, PROJ, "sprint", "sprint-task", None, "create",
+                          {"title": "X", "priority": "alta"})
+    t = store.user_action(root, PROJ, "sprint", "sprint-task", None, "create",
+                          {"title": "X"})
+    assert t["priority"] == 5 and t["owner"] == "agent"
+
+
+def test_move_matrix(root):
+    t = store.user_action(root, PROJ, "sprint", "sprint-task", None, "create",
+                          {"title": "T"})
+    tid = t["id"]
+    # agente nao entra em solicitacao direto
+    with pytest.raises(ValueError, match="solicitacao_testes"):
+        store.agent_task_update(root, PROJ, tid, {"status": "solicitacao_testes"})
+    # agente trabalha e conclui
+    store.agent_task_update(root, PROJ, tid, {"status": "doing"})
+    store.agent_task_update(root, PROJ, tid, {"status": "executado", "desc": "feito"})
+    assert store.load_data(root, PROJ, store.SPRINT_FILE)["tasks"][0]["owner"] == "user"
+    # usuario solicita testes; agente testa e devolve para aprovacao
+    store.user_action(root, PROJ, "sprint", "sprint-task", tid, "move",
+                      {"status": "solicitacao_testes"})
+    store.agent_task_update(root, PROJ, tid, {"status": "aguardando_aprovacao"})
+    # agente nao sai de aguardando; usuario finaliza
+    with pytest.raises(ValueError, match="usuário"):
+        store.agent_task_update(root, PROJ, tid, {"status": "executado"})
+    store.user_action(root, PROJ, "sprint", "sprint-task", tid, "move", {"status": "executado"})
+    assert store.load_data(root, PROJ, store.SPRINT_FILE)["tasks"][0]["status"] == "executado"
+
+
+def test_agent_only_own_tasks(root):
+    t = store.user_action(root, PROJ, "sprint", "sprint-task", None, "create",
+                          {"title": "T"})
+    tid = t["id"]
+    store.user_action(root, PROJ, "sprint", "sprint-task", tid, "update", {"owner": "user"})
+    with pytest.raises(ValueError, match="usuário"):
+        store.agent_task_update(root, PROJ, tid, {"title": "hack"})
+    # dono agente: edicao direta ok
+    t2 = store.user_action(root, PROJ, "sprint", "sprint-task", None, "create",
+                           {"title": "U"})
+    out = store.agent_task_update(root, PROJ, t2["id"], {"desc": "andamento", "priority": 8})
+    assert out["desc"] == "andamento" and out["priority"] == 8

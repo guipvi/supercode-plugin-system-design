@@ -140,3 +140,41 @@ exatos: aprovadas aplicadas (por aba), pendentes aguardando avaliação,
 rejeitadas, tarefas por status (backlog/doing/done) e o próximo passo
 concreto. Sem leitura, sem resposta. Na sprint, filtre por origem
 (tab/kind), status e prioridade como a UI faz.
+
+## Sprint em tempo real (você também enxerga)
+
+A aba sprint se atualiza sozinha via JavaScript — e você deve fazer o
+mesmo: antes de falar de sprint, RELEIA com `system_design_get` (é o
+"tempo real" do agente). Use os mesmos filtros da UI: texto, origem
+(concept/pages/tables), dono (agent/user) e prioridade mínima.
+
+## Dono e prioridade 1–10
+
+- Toda task tem `owner`: `agent` (vez do modelo trabalhar) ou `user`
+  (vez do humano avaliar). Criadas nascem do agente; muda de lado
+  conforme o estágio — e ambos podem ajustar manualmente.
+- `priority` é inteiro de **1 (baixo) a 10 (muito alta)**. O usuário muda
+  na UI e você DEVE ler antes de escolher o que fazer. Você também dá
+  prioridade às suas tasks para o usuário (edite direto se for sua).
+- Para responder "o que eu faço agora", ordene: dono=user primeiro?
+  Não — dono=agent com priority alta, exceto o que aguarda o usuário.
+
+## Colunas e matriz de movimento
+
+Colunas: backlog → doing → executado → solicitacao_testes →
+aguardando_aprovacao (volta para executado). Quem move o quê:
+
+- `solicitacao_testes` SÓ a partir de `executado`, e SÓ o usuário move.
+- `aguardando_aprovacao` SÓ a partir de `solicitacao_testes`, e SÓ você
+  (agente) move. Ao chegar aí, o dono vira o usuário.
+- De `aguardando_aprovacao` SÓ se sai para `executado`, e SÓ o usuário.
+- No resto (backlog/doing/executado), ambos movem livremente — inclusive
+  voltar para backlog reescrevendo.
+
+## Edição direta nas suas tasks (sem proposta)
+
+Use `system_design_task_update(project, task_id, payload_json)` para
+mexer DIRETO nas tasks com `owner=agent` (título, desc, priority,
+owner, status com a matriz acima) — sem proposta, com o usuário vendo
+em tempo real. Tarefa com `owner=user`: NÃO edite, proponha
+(`system_design_propose`). Nunca use arquivos: só as tools.

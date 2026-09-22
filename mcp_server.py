@@ -82,6 +82,20 @@ def tool_list_proposals(project, status="pending"):
         return _err(exc)
 
 
+def tool_task_update(project, task_id, payload_json="{}"):
+    try:
+        payload = json.loads(payload_json or "{}")
+    except json.JSONDecodeError:
+        return _err("payload_json invalido")
+    try:
+        from store import agent_task_update
+        task = agent_task_update(PROJECTS_ROOT, project, task_id, payload)
+        return _ok(task=task,
+                   hint="atualizado direto (owner=agent); usuario ve em tempo real")
+    except Exception as exc:  # noqa: BLE001
+        return _err(exc)
+
+
 if mcp is not None:
     @mcp.tool()
     def system_design_list_projects() -> dict:
@@ -113,7 +127,7 @@ if mcp is not None:
         indiretamente. `concept-element`, `page` e `table` em `create`
         exigem `tasks` ([{title, desc?, priority?, status?}], ao menos 1);
         aprovar a origem cria as tasks na sprint com origem registrada.
-        `status` pode vir `done` com evidencia quando o repo ja executa.
+        `status` pode vir `executado` com evidencia quando o repo ja executa.
         `sprint-task` em `create` e REJEITADO; `update`/`move`/`delete`
         valem para progresso e correcoes.
         Args:
@@ -130,6 +144,20 @@ if mcp is not None:
     @mcp.tool()
     def system_design_list_proposals(project: str, status: str = "pending") -> dict:
         """Lista propostas (pending|approved|rejected|all) de um projeto."""
+
+    @mcp.tool()
+    def system_design_task_update(project: str, task_id: str,
+                                  payload_json: str = "{}") -> dict:
+        """Edita DIRETO uma task com owner=agent (sem proposta).
+        Vale title/desc/priority(1-10)/owner/status com a matriz: para
+        aguardando_aprovacao só de solicitacao_testes; de aguardando só o
+        usuário sai (para executado); solicitacao_testes só parte de
+        executado. Tarefa com owner=user: use system_design_propose.
+        Args:
+            project: id do projeto. task_id: id da tarefa.
+            payload_json: objeto JSON parcial com os campos.
+        """
+        return tool_task_update(project, task_id, payload_json)
         return tool_list_proposals(project, status)
 
 

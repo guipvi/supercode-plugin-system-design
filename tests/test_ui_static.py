@@ -66,12 +66,22 @@ def test_proposals_tab_and_deck():
     assert "tab-proposals-badge" in html
 
 
-def test_sprint_filters_and_exec():
+def test_sprint_filters_owner_prio():
     html = read_ui()
-    for eid in ("s-search", "s-origin", "s-priority", "sprint-count"):
+    for eid in ("s-search", "s-origin", "s-priority", "sprint-count", "s-owner"):
         assert f'id="{eid}"' in html, f"filtro ausente: {eid}"
-    assert "data-exec-t" in html
     assert "btn-add-task" not in html
+    assert "data-exec-t" not in html
+
+
+def test_sprint_dnd_and_realtime():
+    html = read_ui()
+    assert 'draggable="true"' in html
+    assert "bindSprintDnd" in html
+    assert "mv-select" in html
+    assert "setInterval(pokeRealtime" in html
+    for st in ("executado", "solicitacao_testes", "aguardando_aprovacao"):
+        assert st in html
 
 
 def test_project_id_validated_client_side():

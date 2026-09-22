@@ -72,3 +72,16 @@ def test_propose_bad_payload_json(root):
 def test_propose_traversal_rejected(root):
     out = mcp_server.tool_propose("../x", "sprint", "sprint-task", "move", "{}", None, "")
     assert out["ok"] is False
+
+
+def test_task_update_direct_and_matrix(root):
+    import store
+    t = store.user_action(root, "demo", "sprint", "sprint-task", None, "create",
+                          {"title": "T", "desc": "x"})
+    out = mcp_server.tool_task_update("demo", t["id"], '{"status": "doing", "priority": 9}')
+    assert out["ok"] is True and out["task"]["priority"] == 9
+    bad = mcp_server.tool_task_update("demo", t["id"], '{"status": "solicitacao_testes"}')
+    assert bad["ok"] is False
+    store.user_action(root, "demo", "sprint", "sprint-task", t["id"], "update", {"owner": "user"})
+    bad2 = mcp_server.tool_task_update("demo", t["id"], '{"title": "hack"}')
+    assert bad2["ok"] is False

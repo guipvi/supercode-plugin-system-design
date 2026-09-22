@@ -52,8 +52,50 @@ PROJECT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
 ENTITY_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 CONCEPT_KINDS = ("interface", "page", "function", "algorithm")
-PRIORITIES = ("baixa", "media", "alta")
-STATUSES = ("backlog", "doing", "done")
+PRIORITIES = tuple(range(1, 11))
+STATUSES = ("backlog", "doing", "executado", "solicitacao_testes", "aguardando_aprovacao")
+STATUS_LABELS = {"backlog": "Backlog", "doing": "Executando", "executado": "Executado",
+                 "solicitacao_testes": "Solicitação de testes",
+                 "aguardando_aprovacao": "Aguardando aprovação"}
+OWNERS = ("agent", "user")
+
+
+def _check_priority(value, what="priority"):
+    try:
+        iv = int(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{what} deve ser inteiro de 1 a 10")
+    if iv < 1 or iv > 10:
+        raise ValueError(f"{what} deve ser inteiro de 1 a 10")
+    return iv
+
+
+def _auto_owner(status):
+    """Dono pelo estagio: agent executa, user avalia."""
+    if status in ("executado", "aguardando_aprovacao"):
+        return "user"
+    return "agent"
+
+
+def _check_move(actor, cur, nxt):
+    """Matriz de movimentacao usuario x agente."""
+    if cur == nxt:
+        return
+    if nxt == "solicitacao_testes" and cur != "executado":
+        raise ValueError("solicitacao_testes: só a partir de executado")
+    if nxt == "aguardando_aprovacao":
+        if not (actor == "agent" and cur == "solicitacao_testes"):
+            raise ValueError("aguardando_aprovacao: só o agente move, e só de solicitacao_testes")
+        return
+    if cur == "aguardando_aprovacao":
+        if not (actor == "user" and nxt == "executado"):
+            raise ValueError("aguardando_aprovacao: só o usuário move, e só para executado")
+        return
+    if cur == "solicitacao_testes":
+        raise ValueError("solicitacao_testes: só o agente move, para aguardando_aprovacao")
+    if cur == "executado" and nxt == "solicitacao_testes" and actor != "user":
+        raise ValueError("solicitacao de testes: só o usuário solicita")
+    return
 TABS = ("concept", "sprint", "pages", "tables")
 ACTIONS = ("create", "update", "delete", "move", "comment")
 PROPOSAL_STATUSES = ("pending", "approved", "rejected")
@@ -208,7 +250,7 @@ def validate_task_brief(item):
     return {
         "title": _check_str(item.get("title"), "task.title", MAX_TITLE),
         "desc": _check_str(item.get("desc"), "task.desc", MAX_DESC, required=False),
-        "priority": _check_enum(item.get("priority"), "task.priority", PRIORITIES, required=False, default="media"),
+        "priority": _check_priority(item.get("priority"), "task.priority") if item.get("priority") is not None else 5,
         "status": _check_enum(item.get("status"), "task.status", STATUSES, required=False, default="backlog"),
     }
 
@@ -281,7 +323,8 @@ def validate_task(payload, partial=False):
     return {
         "title": _check_str(payload.get("title"), "title", MAX_TITLE, required=req),
         "desc": _check_str(payload.get("desc"), "desc", MAX_DESC, required=False),
-        "priority": _check_enum(payload.get("priority"), "priority", PRIORITIES, required=False, default="media"),
+        "priority": _check_priority(payload.get("priority"), "priority") if payload.get("priority") is not None else 5,
+        "owner": payload.get("owner") if payload.get("owner") in OWNERS else None,
         "status": _check_enum(payload.get("status"), "status", STATUSES, required=False, default="backlog"),
         "assignee": _check_str(payload.get("assignee"), "assignee", 120, required=False),
     }
@@ -294,6 +337,7 @@ def apply_sprint(data, target_id, action, payload, actor):
             raise ValueError("limite de tarefas atingido")
         clean = validate_task(payload or {})
         now = utcnow()
+        clean["owner"] = clean.get("owner") or _auto_owner(clean.get("status") or "backlog")
         tasks.append({
             "id": validate_entity_id((payload or {}).get("id") or _new_id("t"), "id"),
             **clean,
@@ -304,10 +348,17 @@ def apply_sprint(data, target_id, action, payload, actor):
     if item is None:
         raise ValueError("tarefa nao encontrada")
     if action in ("update", "move"):
+        if action == "move" and "status" in (payload or {}):
+            nxt = _check_enum(payload.get("status"), "status", STATUSES)
+            _check_move(actor, item.get("status") or "backlog", nxt)
+            item["status"] = nxt
+            item["owner"] = _auto_owner(nxt)
         clean = validate_task(payload or {}, partial=True)
         for key, value in clean.items():
-            if key in (payload or {}):
+            if key in (payload or {}) and key not in ("status", "owner"):
                 item[key] = value
+        if "owner" in (payload or {}) and payload.get("owner") in OWNERS:
+            item["owner"] = payload.get("owner")
         item["updatedBy"] = actor
         item["updatedAt"] = utcnow()
         return item
@@ -851,12 +902,14 @@ def _spawn_implied_tasks(root, project, element, actor, origin=None):
         if not title or title.lower() in existing:
             continue
         now = utcnow()
+        st = item.get("status") if item.get("status") in STATUSES else "backlog"
         tasks.append({
             "id": _new_id("t"),
             "title": title[:MAX_TITLE],
             "desc": str(item.get("desc", "") or "")[:MAX_DESC],
-            "priority": item.get("priority") if item.get("priority") in PRIORITIES else "media",
-            "status": item.get("status") if item.get("status") in STATUSES else "backlog",
+            "priority": _check_priority(item.get("priority"), "priority") if item.get("priority") is not None else 5,
+            "owner": _auto_owner(st),
+            "status": st,
             "origin": {"tab": origin.get("tab"), "kind": origin.get("kind"),
                        "id": origin.get("id"), "title": origin.get("title")},
             "createdBy": f"{actor}:{origin.get('kind') or 'origem'}",
@@ -925,6 +978,39 @@ def _apply_decision(data, proposal):
     if tab == "tables":
         return apply_tables(data, kind, tid, action, payload, "agent-aprovado")
     raise ValueError(f"tab invalida: {tab!r}")
+
+
+def agent_task_update(root, project, task_id, payload):
+    """Edição DIRETA do agente nas SUAS tarefas (sem proposta).
+
+    usadO pela tool system_design_task_update. Só em task com owner=agent;
+    tarefa do usuário exige proposta. Movimentação segue a matriz.
+    """
+    validate_project_id(project)
+    validate_entity_id(task_id, "task_id")
+    data = load_data(root, project, SPRINT_FILE)
+    tasks = data.setdefault("tasks", [])
+    item = next((x for x in tasks if x.get("id") == task_id), None)
+    if item is None:
+        raise ValueError("tarefa nao encontrada")
+    if (item.get("owner") or "agent") != "agent":
+        raise ValueError("tarefa do usuário: use system_design_propose")
+    payload = payload or {}
+    if "status" in payload and payload.get("status") != item.get("status"):
+        nxt = _check_enum(payload.get("status"), "status", STATUSES)
+        _check_move("agent", item.get("status") or "backlog", nxt)
+        item["status"] = nxt
+        item["owner"] = _auto_owner(nxt)
+    clean = validate_task(payload, partial=True)
+    for key, value in clean.items():
+        if key in payload and key not in ("status", "owner"):
+            item[key] = value
+    if payload.get("owner") in OWNERS:
+        item["owner"] = payload.get("owner")
+    item["updatedBy"] = "agent"
+    item["updatedAt"] = utcnow()
+    save_data(root, project, SPRINT_FILE, data)
+    return item
 
 
 def user_action(root, project, tab, target_kind, target_id, action, payload):

@@ -22,9 +22,17 @@ def test_concept_requires_proposal():
     assert "proposta" in text.lower()
 
 
-def test_locked_targets_respected():
+def test_no_locks_rewrite_is_control():
     text = read_instructions()
-    assert "locked" in text
+    assert "locked" not in text
+    assert "reescrever" in text
+
+
+def test_indirect_tasks_and_matrix():
+    text = read_instructions()
+    for token in ("aguardando_aprovacao", "solicitacao_testes", "system_design_task_update",
+                  "owner", "1 (baixo) a 10", "tempo real"):
+        assert token in text, f"instrucao ausente: {token}"
 
 
 def test_only_user_decides():

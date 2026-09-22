@@ -33,7 +33,7 @@ th{color:#8b93a7;font-weight:500}
 .tag{display:inline-block;background:#1e3a5f;border:1px solid #3b82f6;border-radius:10px;padding:.08rem .5rem;font-size:.72rem;color:#93c5fd;margin:.08rem}
 .tag.ok{background:#14532d;border-color:#1f7a33;color:#7ddf9b}
 .tag.dim{background:#1a1a2e;border-color:#4a4a6a;color:#a0a0c0}
-.cols3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.7rem}
+.cols3{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:.7rem}
 @media(max-width:900px){.cols3{grid-template-columns:1fr}}
 .col{background:#0d1220;border:1px solid #232a3a;border-radius:8px;padding:.6rem;min-height:120px}
 .col h3{margin-top:0;display:flex;justify-content:space-between;align-items:center}
@@ -83,6 +83,12 @@ iframe.preview{width:100%;height:220px;border:1px solid #2b3345;border-radius:6p
 .pv-card{border:1px solid #2b3345;border-radius:10px;padding:.8rem;margin-bottom:.6rem;background:#0d1220;cursor:pointer}
 .pv-card:hover{border-color:#3b82f6}
 .pv-card.sel{border-color:#3b82f6;box-shadow:0 0 0 1px #3b82f6}
+.task[draggable="true"]{cursor:grab}
+.task.dragging{opacity:.45}
+.col.dragover{outline:2px dashed #3b82f6;outline-offset:-2px}
+.mv-select{display:none;width:100%;margin-top:.35rem}
+@media(max-width:860px){ .mv-arrows{display:none} .mv-select{display:block} }
+.prio-num{width:4.2rem}
 .pv-card h3{margin:0 0 .3rem}
 /* ===== diagrama de tabelas ===== */
 #diagram{position:relative;display:flex;flex-wrap:wrap;gap:.7rem;padding:.4rem}
@@ -164,7 +170,8 @@ iframe.preview{width:100%;height:220px;border:1px solid #2b3345;border-radius:6p
     <div class="row" style="margin-bottom:.5rem">
       <input type="text" id="s-search" class="grow" placeholder="Buscar tarefa..." maxlength="120">
       <select id="s-origin"><option value="">Todas as origens</option><option value="concept">conceito</option><option value="pages">página</option><option value="tables">tabela</option><option value="none">sem origem (avulsa)</option></select>
-      <select id="s-priority"><option value="">Todas prioridades</option><option value="baixa">baixa</option><option value="media">media</option><option value="alta">alta</option></select>
+      <select id="s-priority"><option value="">Prioridade ≥</option><option value="1">≥ 1</option><option value="4">≥ 4</option><option value="7">≥ 7</option><option value="9">≥ 9</option></select>
+      <select id="s-owner"><option value="">Dono: todos</option><option value="user">🧑 você</option><option value="agent">🤖 agente</option></select>
     </div>
     <div class="muted" id="sprint-count"></div>
   </div>
@@ -244,7 +251,7 @@ function dataDir(){ return `${HOME}/projetos/${PROJECT}/.opencode/system-design`
 function dataPath(name){ return `${dataDir()}/${name}`; }
 function defaults(name){
   if(name==='concept.json') return {version:1,vision:{objective:'',audience:'',scope:'',nonGoals:''},elements:[]};
-  if(name==='sprint.json') return {version:1,columns:['backlog','doing','done'],tasks:[]};
+  if(name==='sprint.json') return {version:1,columns:['backlog','doing','executado','solicitacao_testes','aguardando_aprovacao'],tasks:[]};
   if(name==='pages.json') return {version:1,pages:[]};
   if(name==='tables.json') return {version:1,tables:[],relations:[]};
   return {version:1,proposals:[]};
@@ -276,7 +283,7 @@ async function saveFile(name, obj){
   CACHE[name]=obj;
 }
 /* ================= validacao (espelho do store.py) ================= */
-const ENUMS={kind:['interface','page','function','algorithm'],priority:['baixa','media','alta'],status:['backlog','doing','done'],ptype:['texto','cabecalho','botao','formulario','imagem','lista','navegacao','outro'],ctype:['uuid','text','integer','numeric','boolean','date','timestamptz','jsonb'],card:['1:1','1:N','N:N']};
+const ENUMS={kind:['interface','page','function','algorithm'],priority:[1,2,3,4,5,6,7,8,9,10],status:['backlog','doing','executado','solicitacao_testes','aguardando_aprovacao'],ptype:['texto','cabecalho','botao','formulario','imagem','lista','navegacao','outro'],ctype:['uuid','text','integer','numeric','boolean','date','timestamptz','jsonb'],card:['1:1','1:N','N:N']};
 function vStr(v,what,max,required=true){ if(v==null||v===''){ if(required) throw new Error(what+' obrigatorio'); return ''; } v=String(v).trim(); if(required&&!v) throw new Error(what+' obrigatorio'); if(v.length>max) throw new Error(what+' excede '+max+' caracteres'); return v; }
 function vEnum(v,what,allowed,def){ if(v==null||v==='') return def; if(!allowed.includes(v)) throw new Error(what+' invalido'); return v; }
 function vTableName(n,siblings){ n=vStr(n,'name',120); if(!/^[A-Za-z_][A-Za-z0-9_]{0,119}$/.test(n)) throw new Error('nome invalido (letras, numeros e _)'); if(siblings.map(s=>s.toLowerCase()).includes(n.toLowerCase())) throw new Error('ja existe: '+n); return n; }
@@ -426,9 +433,9 @@ function applyChange(tab,kind,tid,action,payload,actor){
   }
   if(tab==='sprint'){
     const d=CACHE[FILES.sprint];
-    if(action==='create'){ if(d.tasks.length>=1000) throw new Error('limite de tarefas'); const t={id:vId(payload.id||uid('t')),title:vStr(payload.title,'title',200),desc:vStr(payload.desc,'desc',5000,false),priority:vEnum(payload.priority,'priority',ENUMS.priority,'media'),status:vEnum(payload.status,'status',ENUMS.status,'backlog'),assignee:vStr(payload.assignee,'assignee',120,false),createdBy:actor,createdAt:new Date().toISOString(),updatedBy:actor,updatedAt:new Date().toISOString()}; d.tasks.push(t); return t; }
+    if(action==='create'){ if(d.tasks.length>=1000) throw new Error('limite de tarefas'); const st=vEnum(payload.status,'status',ENUMS.status,'backlog'); const t={id:vId(payload.id||uid('t')),title:vStr(payload.title,'title',200),desc:vStr(payload.desc,'desc',5000,false),priority:(payload.priority==null||payload.priority===''?'5':vInt(payload.priority,'priority')),status:st,owner:(payload.owner==='user'||payload.owner==='agent')?payload.owner:autoOwner(st),assignee:vStr(payload.assignee,'assignee',120,false),createdBy:actor,createdAt:new Date().toISOString(),updatedBy:actor,updatedAt:new Date().toISOString()}; d.tasks.push(t); return t; }
     const t=d.tasks.find(x=>x.id===tid); if(!t) throw new Error('tarefa nao encontrada');
-    if(action==='update'||action==='move'){ if('title' in payload) t.title=vStr(payload.title,'title',200); if('desc' in payload) t.desc=vStr(payload.desc,'desc',5000,false); if('priority' in payload) t.priority=vEnum(payload.priority,'priority',ENUMS.priority); if('status' in payload) t.status=vEnum(payload.status,'status',ENUMS.status); if('assignee' in payload) t.assignee=vStr(payload.assignee,'assignee',120,false); t.updatedBy=actor; t.updatedAt=new Date().toISOString(); return t; }
+    if(action==='update'||action==='move'){ if('status' in payload&&payload.status!==t.status){ checkMoveUI(actor,t.status,payload.status); t.status=vEnum(payload.status,'status',ENUMS.status); t.owner=autoOwner(t.status); } if('title' in payload) t.title=vStr(payload.title,'title',200); if('desc' in payload) t.desc=vStr(payload.desc,'desc',5000,false); if('priority' in payload) t.priority=vInt(payload.priority,'priority'); if('assignee' in payload) t.assignee=vStr(payload.assignee,'assignee',120,false); if('owner' in payload&&(payload.owner==='user'||payload.owner==='agent')) t.owner=payload.owner; t.updatedBy=actor; t.updatedAt=new Date().toISOString(); return t; }
     if(action==='delete'){ d.tasks=d.tasks.filter(x=>x.id!==tid); return {deleted:tid}; }
     throw new Error('acao invalida');
   }
@@ -488,35 +495,67 @@ async function delElement(id){
 }
 
 /* ================= aba: sprint ================= */
-const STATUS_LABEL={backlog:'Backlog',doing:'Executando',done:'Executado'};
+const STATUS_LABEL={backlog:'Backlog',doing:'Executando',executado:'Executado',solicitacao_testes:'Solicitação de testes',aguardando_aprovacao:'Aguardando aprovação'};
+function vInt(v,what){ const n=parseInt(v,10); if(!Number.isInteger(n)||n<1||n>10) throw new Error(what+' deve ser inteiro de 1 a 10'); return n; }
+function autoOwner(st){ return (st==='executado'||st==='aguardando_aprovacao')?'user':'agent'; }
+function ownerTag(t){ const o=t.owner||'agent'; return o==='user'?'<span class="tag ok">🧑 você</span>':'<span class="tag">🤖 agente</span>'; }
+function checkMoveUI(actor,cur,nxt){
+  if(cur===nxt) return;
+  if(nxt==='aguardando_aprovacao'){ if(!(actor==='agent'&&cur==='solicitacao_testes')) throw new Error('aguardando_aprovacao: só o agente move, e só de solicitacao_testes'); return; }
+  if(cur==='aguardando_aprovacao'){ if(!(actor==='user'&&nxt==='executado')) throw new Error('aguardando_aprovacao: só o usuário move, e só para executado'); return; }
+  if(cur==='solicitacao_testes') throw new Error('solicitacao_testes: só o agente move, para aguardando_aprovacao');
+  if(nxt==='solicitacao_testes'){ if(cur!=='executado') throw new Error('solicitacao_testes: só a partir de executado'); if(actor!=='user') throw new Error('solicitacao de testes: só o usuário solicita'); }
+}
 function originTag(t){ const o=t.origin||{}; if(!o.tab) return '<span class="tag dim">avulsa</span>'; const label=o.title||o.id||o.kind||''; return `<span class="tag" title="${esc(o.tab)} · ${esc(o.kind||'')} · ${esc(o.id||'')}">↩ ${esc(o.tab)}${label?': '+esc(String(label).slice(0,40)):''}</span>`; }
 function sprintFiltered(){
   const d=CACHE[FILES.sprint];
   const q=(($('s-search')||{}).value||'').toLowerCase();
   const og=(($('s-origin')||{}).value||'');
   const pr=(($('s-priority')||{}).value||'');
+  const ow=(($('s-owner')||{}).value||'');
   return (d.tasks||[]).filter(t=>{
     if(q&&!(t.title+' '+(t.desc||'')).toLowerCase().includes(q)) return false;
+    if(ow&&((t.owner||'agent')!==ow)) return false;
     const ot=(t.origin||{}).tab||'';
     if(og==='none'){ if(ot) return false; }
     else if(og&&ot!==og) return false;
-    if(pr&&t.priority!==pr) return false;
+    if(pr&&Number(t.priority||0)<Number(pr)) return false;
     return true;
   });
 }
+const USER_MOVES={backlog:['doing'],doing:['backlog','executado'],executado:['doing','backlog','solicitacao_testes'],solicitacao_testes:[],aguardando_aprovacao:['executado']};
 function renderSprint(){
   const all=(CACHE[FILES.sprint].tasks)||[];
   const list=sprintFiltered();
   const cnt=$('sprint-count');
   if(cnt) cnt.textContent=list.length===all.length?`${all.length} tarefa(s)`:`${list.length} de ${all.length} (filtradas)`;
-  $('sprint-cols').innerHTML=['backlog','doing','done'].map(st=>{
+  $('sprint-cols').innerHTML=Object.keys(STATUS_LABEL).map(st=>{
     const ts=list.filter(t=>t.status===st);
-    return `<div class="col"><h3>${STATUS_LABEL[st]} <span class="tag dim">${ts.length}</span></h3>`+(ts.length?ts.map(t=>`<div class="task"><div class="t">${esc(t.title)} </div><div>${originTag(t)}</div><div class="muted">${esc((t.desc||'').slice(0,120))}</div><div class="muted">prioridade: ${esc(t.priority)}${t.assignee?' · '+esc(t.assignee):''}</div><div class="row" style="margin-top:.35rem">${st!=='backlog'?`<button class="ghost sm" data-mv="${esc(t.id)}|${st==='doing'?'backlog':'doing'}">←</button>`:''}${st!=='done'?`<button class="ghost sm" data-mv="${esc(t.id)}|${st==='backlog'?'doing':'done'}">→</button>`:''}<button class="ghost sm" data-edit-t="${esc(t.id)}">editar</button><button class="sm" data-exec-t="${esc(t.id)}" title="copia o prompt para executar esta tarefa no chat">▶ executar</button><button class="danger sm" data-del-t="${esc(t.id)}">x</button></div></div>`).join(''):'<span class="muted">vazio</span>')+`</div>`;
+    return `<div class="col" data-col="${st}"><h3>${STATUS_LABEL[st]} <span class="tag dim">${ts.length}</span></h3>`+(ts.length?ts.map(t=>{const moves=USER_MOVES[t.status]||[];
+    return `<div class="task" draggable="true" data-task="${esc(t.id)}"><div class="t">${esc(t.title)} </div><div>${originTag(t)} ${ownerTag(t)}</div><div class="muted">${esc((t.desc||'').slice(0,120))}</div><div class="muted">prioridade: <input type="number" class="prio-num" min="1" max="10" value="${Number(t.priority)||5}" data-prio="${esc(t.id)}" title="1 baixo – 10 muito alta">${t.assignee?' · '+esc(t.assignee):''}</div><div class="row mv-arrows" style="margin-top:.35rem">${moves.map(m=>`<button class="ghost sm" data-mv="${esc(t.id)}|${m}">${STATUS_LABEL[m].slice(0,12)}${m==='backlog'?' ←':m==='doing'?' ⇄':' →'}</button>`).join('')}<button class="ghost sm" data-edit-t="${esc(t.id)}">editar</button><button class="danger sm" data-del-t="${esc(t.id)}">x</button></div><select class="mv-select" data-mvsel="${esc(t.id)}"><option value="">mover para…</option>${Object.keys(STATUS_LABEL).filter(m=>m!==t.status).map(m=>`<option value="${m}">${STATUS_LABEL[m]}</option>`).join('')}</select></div>`;}).join(''):'<span class="muted">vazio</span>')+`</div>`;
   }).join('');
   $('sprint-cols').querySelectorAll('[data-mv]').forEach(b=>b.onclick=()=>moveTask(b.dataset.mv.split('|')[0],b.dataset.mv.split('|')[1]));
+  $('sprint-cols').querySelectorAll('[data-mvsel]').forEach(s=>s.onchange=()=>{ if(s.value) moveTask(s.dataset.mvsel,s.value); s.value=''; });
   $('sprint-cols').querySelectorAll('[data-edit-t]').forEach(b=>b.onclick=()=>editTask(b.dataset.editT));
-  $('sprint-cols').querySelectorAll('[data-exec-t]').forEach(b=>b.onclick=()=>copyExecPrompt(b.dataset.execT));
   $('sprint-cols').querySelectorAll('[data-del-t]').forEach(b=>b.onclick=()=>delTask(b.dataset.delT));
+  $('sprint-cols').querySelectorAll('[data-prio]').forEach(i=>i.onchange=()=>setPrio(i.dataset.prio,i.value));
+  bindSprintDnd();
+}
+async function setPrio(id,val){
+  try{ applyChange('sprint','sprint-task',id,'update',{priority:val},'user'); await saveTabFile('sprint'); renderAll(); msg('Prioridade atualizada: o agente lê na próxima passada.',true); }
+  catch(e){ msg('Erro: '+e.message,false); renderAll(); }
+}
+function bindSprintDnd(){
+  const cols=$('sprint-cols');
+  cols.querySelectorAll('.task[draggable]').forEach(card=>{
+    card.ondragstart=e=>{ e.dataTransfer.setData('text/plain',card.dataset.task); card.classList.add('dragging'); };
+    card.ondragend=()=>card.classList.remove('dragging');
+  });
+  cols.querySelectorAll('.col[data-col]').forEach(col=>{
+    col.ondragover=e=>{ e.preventDefault(); col.classList.add('dragover'); };
+    col.ondragleave=()=>col.classList.remove('dragover');
+    col.ondrop=e=>{ e.preventDefault(); col.classList.remove('dragover'); const id=e.dataTransfer.getData('text/plain'); if(id) moveTask(id,col.dataset.col); };
+  });
 }
 async function moveTask(id,st){
   try{ applyChange('sprint','sprint-task',id,'move',{status:st},'user'); await saveTabFile('sprint'); renderAll(); }
@@ -524,17 +563,10 @@ async function moveTask(id,st){
 }
 function editTask(id){
   const t=CACHE[FILES.sprint].tasks.find(x=>x.id===id); if(!t) return;
-  openModal(`<h2 style="color:#93c5fd;margin-bottom:.5rem">Editar tarefa</h2><div class="frm"><input type="text" id="m-title" value="${esc(t.title)}" maxlength="200"><label>Descrição<textarea id="m-desc" maxlength="5000">${esc(t.desc||'')}</textarea></label><div class="row"><select id="m-prio">${ENUMS.priority.map(p=>`<option ${p===t.priority?'selected':''}>${p}</option>`).join('')}</select><select id="m-status">${ENUMS.status.map(s=>`<option ${s===t.status?'selected':''}>${s}</option>`).join('')}</select><input type="text" id="m-ass" value="${esc(t.assignee||'')}" placeholder="responsável" maxlength="120"></div></div><div class="row"><button id="m-save">Salvar</button><button class="ghost" onclick="closeModal()">Cancelar</button></div>`);
-  $('m-save').onclick=async()=>{ try{ applyChange('sprint','sprint-task',id,'update',{title:$('m-title').value,desc:$('m-desc').value,priority:$('m-prio').value,status:$('m-status').value,assignee:$('m-ass').value},'user'); await saveTabFile('sprint'); closeModal(); renderAll(); msg('Tarefa salva.',true);}catch(err){msg('Erro: '+err.message,false);} };
+  openModal(`<h2 style="color:#93c5fd;margin-bottom:.5rem">Editar tarefa</h2><div class="frm"><input type="text" id="m-title" value="${esc(t.title)}" maxlength="200"><label>Descrição<textarea id="m-desc" maxlength="5000">${esc(t.desc||'')}</textarea></label><div class="row"><label class="muted">prioridade 1–10<input type="number" id="m-prio" min="1" max="10" value="${Number(t.priority)||5}"></label><select id="m-status">${ENUMS.status.map(s=>`<option value="${s}" ${s===t.status?'selected':''}>${STATUS_LABEL[s]||s}</option>`).join('')}</select><select id="m-owner"><option value="agent" ${(t.owner||'agent')==='agent'?'selected':''}>🤖 agente</option><option value="user" ${t.owner==='user'?'selected':''}>🧑 você</option></select><input type="text" id="m-ass" value="${esc(t.assignee||'')}" placeholder="responsável" maxlength="120"></div></div><div class="row"><button id="m-save">Salvar</button><button class="ghost" onclick="closeModal()">Cancelar</button></div>`);
+  $('m-save').onclick=async()=>{ try{ applyChange('sprint','sprint-task',id,'update',{title:$('m-title').value,desc:$('m-desc').value,priority:parseInt($('m-prio').value,10),status:$('m-status').value,owner:$('m-owner').value,assignee:$('m-ass').value},'user'); await saveTabFile('sprint'); closeModal(); renderAll(); msg('Tarefa salva.',true);}catch(err){msg('Erro: '+err.message,false);} };
 }
 async function delTask(id){ if(!confirm('Excluir tarefa?')) return; try{ applyChange('sprint','sprint-task',id,'delete',{},'user'); await saveTabFile('sprint'); renderAll(); }catch(e){ msg('Erro: '+e.message,false); } }
-function copyExecPrompt(id){
-  const t=CACHE[FILES.sprint].tasks.find(x=>x.id===id); if(!t) return;
-  const txt=`No projeto ${PROJECT}, execute a tarefa de sprint "${t.title}" (id ${t.id}): leia a aba sprint via system_design_get, proponha mover para doing, faça o trabalho no repo, depois proponha mover para done com o resumo do que foi feito. Siga as regras do AGENTS.md.`;
-  const done=()=>msg('Prompt copiado: cole no chat para o agente executar.',true);
-  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(done).catch(()=>{ prompt('Copie e cole no chat:',txt); }); }
-  else prompt('Copie e cole no chat:',txt);
-}
 /* ================= aba: páginas ================= */
 let OPEN_PAGE=null;
 function applyPages(kind,tid,action,payload,actor){
@@ -836,6 +868,17 @@ document.querySelectorAll('#tabs .tab').forEach(t=>t.onclick=()=>{
 });
 window.addEventListener('resize',()=>{ const a=document.querySelector('#tabs .tab.active'); if(a&&a.dataset.tab==='tables'&&typeof drawWires==='function') drawWires(); });
 $('project').onchange=async e=>{ PROJECT=e.target.value; OPEN_PAGE=null; OPEN_TABLE=null; if(PROJECT) await reloadAll(); };
+let RT_TIMER=null;
+function pokeRealtime(){
+  if(document.hidden) return;
+  if(document.querySelector('.modal.open')) return;
+  const ae=document.activeElement;
+  if(ae&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'||ae.tagName==='SELECT')) return;
+  if(document.querySelector('.task.dragging')) return;
+  if(!PROJECT) return;
+  reloadAll().catch(()=>{});
+}
+RT_TIMER=setInterval(pokeRealtime,7000);
 $('btn-reload').onclick=reloadAll;
 $('f-kind').onchange=renderConcept; $('f-search').oninput=renderConcept;
 $('btn-vision').onclick=async()=>{ try{ applyChange('concept','concept-vision',null,'update',{objective:$('v-objective').value,audience:$('v-audience').value,scope:$('v-scope').value,nonGoals:$('v-nongoals').value},'user'); await saveTabFile('concept'); renderAll(); msg('Visão salva.',true);}catch(e){msg('Erro: '+e.message,false);} };
@@ -844,6 +887,7 @@ $('btn-add-element').onclick=async()=>{ try{ applyChange('concept','concept-elem
 if($('s-search')) $('s-search').oninput=renderSprint;
 if($('s-origin')) $('s-origin').onchange=renderSprint;
 if($('s-priority')) $('s-priority').onchange=renderSprint;
+if($('s-owner')) $('s-owner').onchange=renderSprint;
 $('btn-add-page').onclick=async()=>{ try{ const pg=applyChange('pages','page',null,'create',{name:$('p-name').value,route:$('p-route').value,desc:$('p-desc').value,tasks:parseTaskLines($('p-tasks').value)},'user'); await saveTabFile('pages'); await saveSprintIfDirty(); $('p-name').value='';$('p-route').value='';$('p-desc').value='';$('p-tasks').value=''; OPEN_PAGE=pg.id; renderAll(); msg('Página criada.',true);}catch(e){msg('Erro: '+e.message,false);} };
 $('btn-add-table').onclick=async()=>{ try{ const tb=applyChange('tables','table',null,'create',{name:$('tb-name').value,desc:$('tb-desc').value,tasks:parseTaskLines($('tb-tasks').value)},'user'); await saveTabFile('tables'); await saveSprintIfDirty(); $('tb-name').value='';$('tb-desc').value='';$('tb-tasks').value=''; OPEN_TABLE=tb.id; renderAll(); msg('Tabela criada.',true);}catch(e){msg('Erro: '+e.message,false);} };
 $('btn-add-relation').onclick=async()=>{ const parse=s=>{ const m=String(s||'').trim().split('.'); return m.length===2?{table:m[0].trim(),column:m[1].trim()}:null; };
