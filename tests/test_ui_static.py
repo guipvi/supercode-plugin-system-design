@@ -150,3 +150,16 @@ def test_page_simulation_and_page_level_comments():
     assert "data-pc-send=" in html
     assert "pageCommentsHtml" in html
     assert "{pageId:pid,author,text}" in html
+
+
+def test_simulation_uses_real_design_html_and_css():
+    """A simulação precisa refletir o resultado final: CSS do editor visual
+    é salvo (getCss) e recarregado (splitSnap/setStyle); fallback estilizado."""
+    html = read_ui()
+    assert "function splitSnap(" in html
+    assert "ed.getCss" in html
+    assert "ed.setStyle" in html
+    assert "sim-fb" in html
+    # sem padding no bloco (layout igual ao final) e placeholder claro de imagem
+    assert "padding:0;outline:2px dashed transparent" in html
+    assert "#1a2130" not in html  # fundo escuro de painel não pode vazar pro iframe

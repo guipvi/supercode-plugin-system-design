@@ -862,7 +862,7 @@ function pvRender(el){
   if(el.type==='cabecalho') return `<h3>${label}</h3>${el.content?`<p class="muted">${content}</p>`:''}`;
   if(el.type==='botao') return `<button type="button">${label||'Botão'}</button>${el.content?`<div class="muted" style="margin-top:.3rem">${content}</div>`:''}`;
   if(el.type==='formulario') return `<div class="frm"><label>${label||'Campo'}<input type="text" placeholder="${esc((el.content||'').slice(0,40))}"></label></div>`;
-  if(el.type==='imagem') return `<div style="background:#1a2130;border-radius:6px;min-height:110px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:.3rem"><span style="font-size:1.6rem">🖼</span><span class="muted">${label}</span></div>`;
+  if(el.type==='imagem') return `<div class="sim-imgph" style="background:#e8eef8;border:1px dashed #94a3b8;border-radius:6px;min-height:110px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:.3rem;color:#475569"><span style="font-size:1.6rem">🖼</span><span class="muted">${label}</span></div>`;
   if(el.type==='lista'){ const items=(el.content||'').split('\n').map(s=>s.trim()).filter(Boolean).slice(0,6); return `${label?`<strong>${label}</strong>`:''}<ul style="margin:.3rem 0 .3rem 1.1rem">${items.map(i=>`<li>${esc(i)}</li>`).join('')||'<li class="muted">(vazia)</li>'}</ul>`; }
   if(el.type==='navegacao'){ const links=label.split('|').map(s=>s.trim()).filter(Boolean); return `<nav class="row">${links.map(l=>`<button class="ghost sm" type="button">${esc(l)}</button>`).join('')||'<span class="muted">(sem links)</span>'}</nav>`; }
   return `${label?`<p><strong>${label}</strong></p>`:''}${el.content?`<p>${content}</p>`:''}`;
@@ -876,28 +876,53 @@ function pvBlockVisual(el){
 }
 /* ===== simulação: página final composta em um único iframe ===== */
 let PvSim=null;
+function splitSnap(html){
+  if(!html) return {body:'',css:''};
+  const sm=(html.match(/<style[^>]*>[\s\S]*?<\/style>/gi)||[]).map(m=>{const c=m.match(/<style[^>]*>([\s\S]*?)<\/style>/i);return c?c[1]:'';}).join('\n');
+  const bm=html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+  let body=bm?bm[1]:html;
+  body=body.replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'');
+  return {body,css:sm};
+}
 function simBlockInner(el){
-  if(!el.snapshotHtml) return pvRender(el);
-  const bm=el.snapshotHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-  return bm?bm[1]:el.snapshotHtml;
+  if(!el.snapshotHtml) return `<div class="sim-fb">${pvRender(el)}</div>`;
+  const b=splitSnap(el.snapshotHtml).body;
+  return b.trim()?b:pvRender(el);
 }
 function buildSimDoc(ordered){
   let css='', links='';
   const blocks=ordered.map(e=>{
     let inner;
     if(e.snapshotHtml){
-      inner=simBlockInner(e);
-      const styles=e.snapshotHtml.match(/<style[^>]*>[\s\S]*?<\/style>/gi)||[];
-      for(const m of styles){ const c=m.match(/<style[^>]*>([\s\S]*?)<\/style>/i); if(c) css+='\n'+c[1]; }
-      const ls=e.snapshotHtml.match(/<link\b[^>]*rel=["']stylesheet["'][^>]*>/gi)||[];
+      const s=splitSnap(el_snap(e));
+      inner=s.body.trim()?s.body:`<div class="sim-fb">${pvRender(e)}</div>`;
+      if(s.css) css+='\n'+s.css;
+      const ls=(el_snap(e).match(/<link\b[^>]*rel=["']stylesheet["'][^>]*>/gi)||[]);
       for(const l of ls) links+='\n'+l;
-    } else inner=pvRender(e);
+    } else inner=`<div class="sim-fb">${pvRender(e)}</div>`;
     return `<div class="sim-block" data-sim-id="${esc(e.id)}">${inner}</div>`;
   }).join('\n');
-  const base='html,body{margin:0;padding:0;background:#fff;color:#111;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}'+
-    '\n.sim-block{position:relative;cursor:pointer;box-sizing:border-box;padding:.4rem .55rem}'+
-    '\n.sim-block:hover{outline:2px dashed rgba(37,99,235,.5);outline-offset:-2px}'+
-    '\n.sim-block.sim-selected{outline:2px solid #2563eb;outline-offset:-2px;background:rgba(37,99,235,.06)}';
+  const base=`html,body{margin:0;padding:0;background:#fff;color:#1f2329;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;font-size:16px;line-height:1.5}
+*,*::before,*::after{box-sizing:border-box}
+img{max-width:100%;height:auto}
+h1,h2,h3,h4{line-height:1.25;margin:.7rem 0 .4rem;color:#111827}
+p{margin:.45rem 0}
+a{color:#2563eb}
+ul{margin:.35rem 0 .35rem 1.2rem}
+.muted{color:#6b7280;font-size:.875em}
+.row{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+.sm{font-size:.85em;padding:.3rem .7rem}
+.ghost{background:transparent;color:#2563eb;border:1px solid #2563eb;border-radius:6px;padding:.4rem .8rem;cursor:pointer;font:inherit}
+.frm{margin:.5rem 0}
+.frm label{display:flex;flex-direction:column;gap:.3rem;font-size:.9em;color:#374151;max-width:340px}
+.frm input,.frm textarea,.frm select{font:inherit;padding:.55rem .7rem;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#1f2329;width:100%}
+.sim-fb button,.sim-fb [type=button]{font:inherit;cursor:pointer;background:#2563eb;color:#fff;border:0;border-radius:6px;padding:.55rem 1.1rem}
+.sim-fb button.ghost,.sim-fb .ghost{background:transparent;color:#2563eb;border:1px solid #2563eb;padding:.4rem .8rem}
+.sim-fb nav{display:flex;gap:.5rem;flex-wrap:wrap;margin:.4rem 0}
+.sim-fb h3{font-size:1.35rem}
+.sim-block{position:relative;cursor:pointer;padding:0;outline:2px dashed transparent;outline-offset:-1px}
+.sim-block:hover{outline-color:rgba(37,99,235,.45)}
+.sim-block.sim-selected{outline:2px solid #2563eb;outline-offset:-1px;background:rgba(37,99,235,.05)}`;
   const bridge=`<script>(function(){
 document.addEventListener('click',function(ev){var t=ev.target;var b=t&&t.closest?t.closest('[data-sim-id]'):null;if(b){try{parent.postMessage({sim:'select',id:b.getAttribute('data-sim-id')},'*');}catch(e){}}var a=t&&t.closest?t.closest('a'):null;if(a)ev.preventDefault();},true);
 window.addEventListener('message',function(ev){var d=ev.data||{};if(d.sim!=='select'||!d.id)return;var all=document.querySelectorAll('.sim-block');for(var i=0;i<all.length;i++)all[i].classList.remove('sim-selected');var n=document.querySelector('[data-sim-id="'+d.id+'"]');if(n)n.classList.add('sim-selected');});
@@ -906,6 +931,7 @@ window.addEventListener('load',report);setTimeout(report,80);setTimeout(report,5
 })();<\/script>`;
   return '<!doctype html><html><head><meta charset="utf-8"><style>'+base+css+'</style>'+links+'</head><body>'+blocks+bridge+'</body></html>';
 }
+function el_snap(e){ return e.snapshotHtml||''; }
 function pvCommentsHtml(pg, sel){
   if(!sel) return `<div id="pv-comments"><p class="pv-hint">Clique num bloco da simulação (ou em "ver/comentar") para selecionar e comentar como revisor. A página final é montada na ordem dos elementos, usando o <span class="mono">snapshotHtml</span> do editor visual quando existir.</p></div>`;
   return `<div id="pv-comments" data-for="${esc(sel.id)}">
@@ -1033,11 +1059,13 @@ function loadGrapes(){
 }
 async function openVisualEditor(eid){
   const el=findEl(eid);
-  openModal(`<h2 style="color:#93c5fd;margin-bottom:.5rem">Editor visual — ${esc(el.label)}</h2><p class="hint">Editor open-source (GrapesJS, MIT), carregado somente agora, sob seu clique. O HTML final vira uma pré-visualização travável do elemento.</p><div id="grapes-host"></div><div class="row" style="margin-top:.6rem"><button id="g-save">Salvar design no elemento</button><button class="ghost" onclick="closeModal()">Fechar</button></div><div class="hint" id="g-msg"></div>`);
+  openModal(`<h2 style="color:#93c5fd;margin-bottom:.5rem">Editor visual — ${esc(el.label)}</h2><p class="hint">Editor open-source (GrapesJS, MIT), carregado somente agora, sob seu clique. HTML + estilos (CSS) salvos no elemento — a prévia e a simulação usam o design real.</p><div id="grapes-host"></div><div class="row" style="margin-top:.6rem"><button id="g-save">Salvar design no elemento</button><button class="ghost" onclick="closeModal()">Fechar</button></div><div class="hint" id="g-msg"></div>`);
   try{
     await loadGrapes();
-    const ed=grapesjs.init({container:'#grapes-host',height:'420px',fromElement:false,storageManager:false,components:el.snapshotHtml||`<div><h2>${esc(el.label)}</h2><p>${esc(el.content||'')}</p></div>`});
-    $('g-save').onclick=async()=>{ try{ const html=ed.getHtml(); applyChange('pages','page-element',eid,'update',{snapshotHtml:html},'user'); await saveTabFile('pages'); PvSelected=eid; closeModal(); renderAll(); msg('Design salvo: a prévia da página já usa a última versão.',true);}catch(e){msg('Erro: '+e.message,false);} };
+    const boot=splitSnap(el.snapshotHtml||`<div><h2>${esc(el.label)}</h2><p>${esc(el.content||'')}</p></div>`);
+    const ed=grapesjs.init({container:'#grapes-host',height:'420px',fromElement:false,storageManager:false,components:boot.body||`<div><h2>${esc(el.label)}</h2><p>${esc(el.content||'')}</p></div>`});
+    if(boot.css) try{ ed.setStyle(boot.css); }catch(e){}
+    $('g-save').onclick=async()=>{ try{ const html=ed.getHtml(); const css=(typeof ed.getCss==='function')?ed.getCss():((typeof ed.getStyle==='function')?ed.getStyle().map(String).join('\n'):''); const snap='<!doctype html><html><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+html+'</body></html>'; applyChange('pages','page-element',eid,'update',{snapshotHtml:snap},'user'); await saveTabFile('pages'); PvSelected=eid; closeModal(); renderAll(); msg('Design (HTML+CSS) salvo: a simulação já usa a última versão.',true);}catch(e){msg('Erro: '+e.message,false);} };
   }catch(e){ $('g-msg').textContent='Editor visual indisponível (sem internet para o CDN). Use o formulário de conteúdo.'; }
 }
 
