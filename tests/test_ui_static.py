@@ -222,3 +222,32 @@ def test_window_name_ingest_channel():
     assert "#sd=" in html
     assert "function sdGunzipB64(" in html
     assert "DecompressionStream" in html
+
+
+def test_left_dock_interface_next_to_chat():
+    """Abrir/editar na aba Páginas ancora a interface na coluna esquerda
+    do painel (lugar do chat): o plugin é same-origin com o painel e injeta
+    um pane #frame-sd-left em #content; o 💬 (#btn-chat-toggle) passa a ter
+    3 estados (interface → chat → fechado → chat…); saveTabFile propaga
+    sdSync para a instância irmã (frame-vnc ↔ frame-sd-left)."""
+    html = read_ui()
+    assert "function sdPanelDoc(" in html
+    assert "function sdOpenLeft(" in html
+    assert "function sdCloseLeft(" in html
+    assert "btn-chat-toggle" in html
+    assert "frame-sd-left" in html
+    assert "browser-pane" in html
+    assert "sdLeft=" in html
+    assert "body.sd-embed" in html
+    assert "function sdEmbedStart(" in html
+    assert "function sdEmbedParams(" in html
+    assert "function sdNotifyPeer(" in html
+    assert "sdSync" in html
+    # abrir/editar passam pelo dock; fora do painel mantém o comportamento antigo
+    assert "sdOpenLeft(b.dataset.openP,'open')" in html
+    assert "sdOpenLeft(b.dataset.editP,'edit')" in html
+    # saveTabFile avisa a irmã para recarregar
+    assert "await saveFile(m[tab],CACHE[m[tab]]); sdNotifyPeer();" in html
+    # modo embed: só #page-detail (#tab-pages sem a lista)
+    assert "body.sd-embed #tab-pages > .card{display:none}" in html
+    assert "body.sd-embed #page-detail{display:block}" in html

@@ -127,6 +127,12 @@ iframe.snapshot{width:100%;min-height:140px;max-height:280px;border:1px solid #2
 .dcol.src{background:#14532d;color:#fff}
 .dcol.dst-ok:hover{background:#14532d}
 #linkbar{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:.5rem;font-size:.8rem;color:#8b93a7}
+/* ===== modo embed: só a interface da página (coluna esquerda do painel) ===== */
+body.sd-embed > h1,body.sd-embed > .sub,body.sd-embed > .topbar,body.sd-embed > #tabs,body.sd-embed > .tabpanel{display:none!important}
+body.sd-embed #tab-pages{display:block!important}
+body.sd-embed #tab-pages > .card{display:none}
+body.sd-embed #page-detail{display:block}
+body.sd-embed{padding:.7rem}
 </style>
 </head>
 <body>
@@ -567,7 +573,7 @@ async function decideProposal(id,approve){
     renderAll(); msg('Proposta aprovada e aplicada.',true);
   }catch(e){ msg('Erro: '+e.message,false); }
 }
-async function saveTabFile(tab){ const m={concept:FILES.concept,sprint:FILES.sprint,pages:FILES.pages,tables:FILES.tables}; await saveFile(m[tab],CACHE[m[tab]]); }
+async function saveTabFile(tab){ const m={concept:FILES.concept,sprint:FILES.sprint,pages:FILES.pages,tables:FILES.tables}; await saveFile(m[tab],CACHE[m[tab]]); sdNotifyPeer(); }
 
 /* Aplica mudança (usuário direto ou proposta aprovada). Espelha store.py */
 function applyChange(tab,kind,tid,action,payload,actor){
@@ -850,8 +856,8 @@ function findEl(eid){ vId(eid); for(const p of CACHE[FILES.pages].pages) for(con
 function renderPages(){
   const d=CACHE[FILES.pages];
   $('pages-list').innerHTML=d.pages.length?'<table><tr><th>Página</th><th>Rota</th><th>Elem.</th><th></th></tr>'+d.pages.map(p=>`<tr><td><strong>${esc(p.name)}</strong> <br><span class="muted">${esc((p.desc||'').slice(0,120))}</span></td><td class="mono">${esc(p.route||'—')}</td><td>${(p.elements||[]).length}</td><td style="white-space:nowrap"><button class="sm" data-open-p="${esc(p.id)}">abrir</button> <button class="ghost sm" data-edit-p="${esc(p.id)}">editar</button>  <button class="danger sm" data-del-p="${esc(p.id)}">x</button></td></tr>`).join('')+'</table>':'<span class="muted">Nenhuma página. Cadastre as páginas do sistema.</span>';
-  $('pages-list').querySelectorAll('[data-open-p]').forEach(b=>b.onclick=()=>{OPEN_PAGE=b.dataset.openP;PvSelected=null;renderPageDetail();});
-  $('pages-list').querySelectorAll('[data-edit-p]').forEach(b=>b.onclick=()=>editPage(b.dataset.editP));
+  $('pages-list').querySelectorAll('[data-open-p]').forEach(b=>b.onclick=()=>{ if(sdOpenLeft(b.dataset.openP,'open')) return; OPEN_PAGE=b.dataset.openP;PvSelected=null;renderPageDetail(); });
+  $('pages-list').querySelectorAll('[data-edit-p]').forEach(b=>b.onclick=()=>{ if(sdOpenLeft(b.dataset.editP,'edit')) return; editPage(b.dataset.editP); });
   $('pages-list').querySelectorAll('[data-del-p]').forEach(b=>b.onclick=()=>delPage(b.dataset.delP));
   renderPageDetail();
 }
@@ -1419,11 +1425,111 @@ async function loadProjects(){
     sel.value=PROJECT;
   }catch(e){ sel.innerHTML='<option value="">(erro ao listar)</option>'; }
 }
+/* ===== interface na coluna esquerda do painel (lugar do chat) =====
+   O plugin é same-origin com o painel (code.guipvi.uk): abre um iframe
+   irmão em #content (espaço do chat) com a interface da página; o 💬 do
+   painel passa a ter 3 estados: interface → chat → fechado → chat… */
+function sdEmbedParams(){
+  try{ const q=new URLSearchParams(location.search); const id=q.get('sdLeft'); if(!id) return null; return {id, mode:q.get('mode')==='edit'?'edit':'open'}; }
+  catch(e){ return null; }
+}
+function sdEmbedStart(emb){
+  document.body.classList.add('sd-embed');
+  OPEN_PAGE=emb.id; PvSelected=null;
+  renderPageDetail();
+  try{ const pg=(CACHE[FILES.pages].pages||[]).find(p=>p.id===emb.id); if(pg) document.title=(emb.mode==='edit'?'Editar · ':'Página · ')+(pg.name||emb.id); }catch(e){}
+  if(emb.mode==='edit') editPage(emb.id);
+}
+let SD_LEFT={pane:null,prev:null,toggle:null,hooked:false};
+function sdPanelDoc(){
+  try{
+    if(window.parent===window) return null;
+    const d=window.parent.document;
+    const content=d.getElementById('content');
+    const bp=d.getElementById('browser-pane');
+    const btn=d.getElementById('btn-chat-toggle');
+    const fe=window.frameElement;
+    if(!content||!bp||!btn||!fe||!bp.contains(fe)) return null;
+    return {d,content,bp,btn};
+  }catch(e){ return null; }
+}
+function sdOpenLeft(id,mode){
+  const P=sdPanelDoc(); if(!P) return false;
+  try{ P.content.style.display=''; }catch(e){}
+  if(!SD_LEFT.pane){
+    const d=P.d;
+    SD_LEFT.pane=d.createElement('div');
+    SD_LEFT.pane.className='pane';
+    SD_LEFT.pane.dataset.id='sd-left';
+    const f=d.createElement('iframe');
+    f.id='frame-sd-left';
+    f.title='Interface da página';
+    f.allow='fullscreen; clipboard-read; clipboard-write';
+    SD_LEFT.pane.appendChild(f);
+    P.content.insertBefore(SD_LEFT.pane,P.content.firstChild);
+    SD_LEFT.prev=[...P.content.querySelectorAll('.pane.on')].find(p=>p!==SD_LEFT.pane)||P.content.querySelector('.pane[data-id="chat"]');
+    if(SD_LEFT.prev) SD_LEFT.prev.classList.remove('on');
+    SD_LEFT.pane.classList.add('on');
+    if(!SD_LEFT.toggle) SD_LEFT.toggle=P.btn.onclick;
+    P.btn.onclick=()=>{ sdCloseLeft(true); };
+    if(!SD_LEFT.hooked){
+      SD_LEFT.hooked=true;
+      d.addEventListener('click',ev=>{
+        const a=ev.target&&ev.target.closest?ev.target.closest('a[data-view]'):null;
+        if(a&&SD_LEFT.pane) sdCloseLeft(false);
+      },true);
+    }
+  }else{
+    P.content.style.display='';
+    if(!SD_LEFT.pane.classList.contains('on')) SD_LEFT.pane.classList.add('on');
+    P.btn.onclick=()=>{ sdCloseLeft(true); };
+  }
+  const f=SD_LEFT.pane.querySelector('iframe');
+  const url='/plugins/system-design/ui?sdLeft='+encodeURIComponent(id)+'&mode='+encodeURIComponent(mode||'open');
+  if(f.dataset.url!==url){ f.dataset.url=url; f.src=url; }
+  return true;
+}
+function sdCloseLeft(showChat){
+  if(!SD_LEFT.pane) return;
+  try{ SD_LEFT.pane.remove(); }catch(e){}
+  SD_LEFT.pane=null;
+  try{
+    const P=sdPanelDoc();
+    if(P){
+      if(showChat!==false){
+        P.content.style.display='';
+        if(SD_LEFT.prev&&SD_LEFT.prev.isConnected) SD_LEFT.prev.classList.add('on');
+      }
+      if(SD_LEFT.toggle) P.btn.onclick=SD_LEFT.toggle;
+    }
+  }catch(e){}
+  SD_LEFT.prev=null;
+}
+function sdNotifyPeer(){
+  try{
+    if(window.parent===window) return;
+    const d=window.parent.document;
+    const me=window.frameElement;
+    let target=null;
+    if(me&&me.id==='frame-sd-left') target=d.getElementById('frame-vnc');
+    else if(me&&me.id==='frame-vnc') target=d.getElementById('frame-sd-left');
+    const origin=d.location&&d.location.origin?d.location.origin:'*';
+    if(target&&target.contentWindow) target.contentWindow.postMessage({sdSync:1},origin);
+  }catch(e){}
+}
+window.addEventListener('message',ev=>{
+  if(ev.origin!==location.origin) return;
+  if(!ev.data||ev.data.sdSync!==1) return;
+  clearTimeout(window.__sdSyncT);
+  window.__sdSyncT=setTimeout(()=>{ if(PROJECT) reloadAll().catch(()=>{}); },400);
+});
 async function boot(){
   await loadProjects();
   if(!PROJECT){ $('proj-meta').textContent='crie um projeto em /projetos para começar'; sdIngestName().catch(()=>{}); return; }
   await reloadAll();
   sdIngestName().catch(()=>{});
+  const emb=sdEmbedParams();
+  if(emb) try{ sdEmbedStart(emb); }catch(e){}
 }
 async function reloadAll(){
   if(!PROJECT) return;
