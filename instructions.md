@@ -123,15 +123,22 @@ recriar após mudança visual relevante):
    `script`, troque cada `link[rel=stylesheet]` pelo CSS (`fetch` +
    `<style>`), injete `<base href="https://<app>/">`, serialice
    `<!doctype html>` + `outerHTML`, comprima (gzip+base64) e **acrescente**
-   ao acumulador `window.name` `SDCAP2|` + `JSON.stringify([{id,gz},...])`
-   — o `window.name` persiste entre navegações **same-origin** (dá para
-   capturar várias rotas seguidas sem ir ao painel; ~800KB testados ok).
+    ao acumulador `window.name` `SDCAP2|` + `JSON.stringify([{id,gz},...])`
+    — o `window.name` persiste entre navegações **same-origin** (dá para
+    capturar várias rotas seguidas sem ir ao painel; ~800KB testados ok).
+    **Lote curto: salte para o painel a cada ~5 capturas** — qualquer
+    página de erro/interstício do navegador (ex.: chrome-error) **apaga o
+    `window.name`** e o lote inteiro se perde.
 3. Entrega por **navegação top-level com hash** (o hash fica no cliente,
    não vai ao servidor): `location.href = '<host>/plugins/system-design/ui#sd=' +
-   encodeURIComponent(JSON.stringify(entries))`. No `boot()`,
+   encodeURIComponent(JSON.stringify(entries))` (via `setTimeout(…,150)`
+   para o `evaluate` retornar antes da navegação). No `boot()`,
    `sdIngestName()` lê `#sd=` (fallback: `SDCAP2|` no `window.name`),
    faz gunzip de cada `gz`, anota os `data-sim-id` (heurística
-   label/conteúdo↔DOM), grava `previewHtml`, limpa hash+name, mostra o
+   label/conteúdo↔DOM), **recomprime e grava `previewHtml` como
+   `'gz:'+base64`** (o arquivo `pages.json` tem limite de 2MB alinhado ao
+   store; HTML cru de ~28 páginas não caberia), hidrata em memória
+   (`PREV_RAW`/`previewRawOf`) para o render, limpa hash+name, mostra o
    toast *Capturas ingeridas* e expõe `window.__sdIngest`
    (`{total, ok, errs, ids}`).
 4. Confirme com `evaluate` lendo `window.__sdIngest` e o badge

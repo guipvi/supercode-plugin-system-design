@@ -311,14 +311,18 @@ async function ensureFile(name){
     return def;
   }
 }
+/* cache runtime: previewHtml hidratado (não persistido; o arquivo guarda 'gz:'+base64) */
+const PREV_RAW=new Map();
 async function loadAll(){
   const out={};
   for(const name of Object.values(FILES)) out[name]=await ensureFile(name);
-  CACHE=out; return out;
+  CACHE=out;
+  try{ await sdHydratePreviews(); }catch(e){}
+  return out;
 }
 async function saveFile(name, obj){
   const raw=JSON.stringify(obj);
-  if(new Blob([raw]).size>512*1024) throw new Error(name+' excede 512KB');
+  if(new Blob([raw]).size>2*1024*1024) throw new Error(name+' excede 2MB (limite do store)');
   await apiWrite(dataPath(name), JSON.stringify(obj,null,2));
   CACHE[name]=obj;
 }
@@ -853,8 +857,13 @@ function renderPages(){
 }
 function editPage(id){
   const p=CACHE[FILES.pages].pages.find(x=>x.id===id); if(!p) return;
-  openModal(`<h2 style="color:#93c5fd;margin-bottom:.5rem">Editar página</h2><div class="frm"><input type="text" id="m-name" value="${esc(p.name)}" maxlength="200"><input type="text" id="m-route" value="${esc(p.route||'')}" maxlength="200"><label>Descrição<textarea id="m-desc" maxlength="5000">${esc(p.desc||'')}</textarea></label><label>Preview do resultado final (HTML capturado; vazio = composição dos elementos)<textarea id="m-preview" rows="4" style="font-family:monospace;font-size:.8rem">${esc(p.previewHtml||'')}</textarea></label></div><div class="row"><button id="m-save">Salvar</button><button class="ghost" onclick="closeModal()">Cancelar</button></div>`);
-  $('m-save').onclick=async()=>{ try{ applyChange('pages','page',id,'update',{name:$('m-name').value,route:$('m-route').value,desc:$('m-desc').value,previewHtml:$('m-preview').value},'user'); await saveTabFile('pages'); closeModal(); renderAll(); msg('Página salva.',true);}catch(e){msg('Erro: '+e.message,false);} };
+  openModal(`<h2 style="color:#93c5fd;margin-bottom:.5rem">Editar página</h2><div class="frm"><input type="text" id="m-name" value="${esc(p.name)}" maxlength="200"><input type="text" id="m-route" value="${esc(p.route||'')}" maxlength="200"><label>Descrição<textarea id="m-desc" maxlength="5000">${esc(p.desc||'')}</textarea></label><label>Preview do resultado final (HTML capturado; vazio = composição dos elementos)<textarea id="m-preview" rows="4" style="font-family:monospace;font-size:.8rem">${esc(previewRawOf(p))}</textarea></label></div><div class="row"><button id="m-save">Salvar</button><button class="ghost" onclick="closeModal()">Cancelar</button></div>`);
+  { const ta=$('m-preview');
+    ta.dataset.gz=(p.previewHtml&&String(p.previewHtml).indexOf('gz:')===0)?String(p.previewHtml):'';
+    ta.dataset.shown=ta.value; }
+  $('m-save').onclick=async()=>{ try{
+    { const ta=$('m-preview'); if(ta.value===ta.dataset.shown&&ta.dataset.gz) ta.value=ta.dataset.gz; }
+    applyChange('pages','page',id,'update',{name:$('m-name').value,route:$('m-route').value,desc:$('m-desc').value,previewHtml:$('m-preview').value},'user'); await saveTabFile('pages'); closeModal(); renderAll(); msg('Página salva.',true);}catch(e){msg('Erro: '+e.message,false);} };
 }
 async function delPage(id){ if(!confirm('Excluir página e seus elementos?')) return; try{ applyChange('pages','page',id,'delete',{},'user'); await saveTabFile('pages'); renderAll(); }catch(e){ msg('Erro: '+e.message,false); } }
 /* Renderiza o bloco como o usuário final veria (revisor clica para comentar) */
@@ -895,8 +904,27 @@ function report(){try{var h=Math.max(document.body?document.body.scrollHeight:0,
 window.addEventListener('load',report);setTimeout(report,80);setTimeout(report,500);
 })();<\/script>`;
 }
+function previewRawOf(pg){
+  const v=String(pg.previewHtml||'');
+  if(!v) return '';
+  if(v.indexOf('gz:')!==0) return v;
+  return PREV_RAW.get(pg.id)||'';
+}
+async function sdHydratePreviews(){
+  const pages=(CACHE&&CACHE[FILES.pages]&&CACHE[FILES.pages].pages)||[];
+  for(const p of pages){
+    const v=String(p.previewHtml||'');
+    if(v.indexOf('gz:')===0){
+      try{ PREV_RAW.set(p.id, await sdGunzipB64(v.slice(3))); }
+      catch(e){ PREV_RAW.delete(p.id); }
+    }
+    else if(v) PREV_RAW.set(p.id, v);
+    else PREV_RAW.delete(p.id);
+  }
+}
 function buildPreviewDoc(pg){
-  let doc=String(pg.previewHtml||'');
+  let doc=previewRawOf(pg);
+  if(!doc) return buildSimDoc(pageOrdered(pg));
   doc=doc.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'');
   doc=doc.replace(/<link[^>]+(modulepreload|rel=["']preload["'][^>]+\.js)[^>]*>/gi,'');
   const br=simBridgeJS();
@@ -965,7 +993,9 @@ window.addEventListener('message',async ev=>{
     const pg=(CACHE[FILES.pages].pages||[]).find(p=>p.id===d.id);
     if(!pg) return reply({err:'page missing'});
     const html=annotateCapture(pg,d.html);
-    applyChange('pages','page',pg.id,'update',{previewHtml:html},'user');
+    PREV_RAW.set(pg.id,html);
+    const gz=await sdGzipB64(html);
+    applyChange('pages','page',pg.id,'update',{previewHtml:'gz:'+gz},'user');
     await saveTabFile('pages');
     const anns=(html.match(/data-sim-id="/g)||[]).length;
     reply({anns,bytes:html.length});
@@ -977,6 +1007,14 @@ async function sdGunzipB64(b64){
   const ds=new DecompressionStream('gzip');
   const st=new Blob([u]).stream().pipeThrough(ds);
   return await new Response(st).text();
+}
+async function sdGzipB64(html){
+  const cs=new CompressionStream('gzip');
+  const buf=await new Response(new Blob([html]).stream().pipeThrough(cs)).arrayBuffer();
+  const u8=new Uint8Array(buf);
+  let s=''; const CH=0x8000;
+  for(let i=0;i<u8.length;i+=CH) s+=String.fromCharCode.apply(null,u8.subarray(i,i+CH));
+  return btoa(s);
 }
 function sdEntriesFromUrl(){
   const h=location.hash||'';
@@ -1015,7 +1053,9 @@ async function sdIngestName(){
         else html=e.html||'';
         if(!html){ errs.push(e.id+':vazio'); continue; }
         const out=annotateCapture(pg,html);
-        applyChange('pages','page',pg.id,'update',{previewHtml:out},'user');
+        PREV_RAW.set(pg.id,out);
+        const gz2=await sdGzipB64(out);
+        applyChange('pages','page',pg.id,'update',{previewHtml:'gz:'+gz2},'user');
         ok++;
       }catch(ex){ errs.push(e.id+':'+String(ex)); }
     }

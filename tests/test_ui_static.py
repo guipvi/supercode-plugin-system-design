@@ -190,13 +190,23 @@ def test_preview_capture_elements_are_clickable():
 
 def test_sd_capture_receiver_and_annotate():
     """Captura em massa: UI recebe {type:'sd-capture'} via postMessage
-    apenas do origin do app real, anota data-sim-id e persiste previewHtml."""
+    apenas do origin do app real, anota data-sim-id e persiste previewHtml
+    comprimido ('gz:'+base64) para caber no limite de 2MB do store."""
     html = read_ui()
     assert "function annotateCapture(" in html
     assert "ev.origin!=='https://sincrea.guipvi.uk'" in html
     assert "d.type!=='sd-capture'" in html
     assert "sd-capture-ok" in html
-    assert "previewHtml:html" in html
+    assert "previewHtml:'gz:'+gz" in html
+    # hidratacao runtime: arquivo guarda gz, render le PREV_RAW
+    assert "function previewRawOf(" in html
+    assert "function sdHydratePreviews(" in html
+    assert "await sdHydratePreviews()" in html
+    assert "function sdGzipB64(" in html
+    assert "CompressionStream" in html
+    # limite do saveFile alinhado ao store.py (2MB)
+    assert "2*1024*1024" in html
+    assert "excede 512KB" not in html
 
 
 def test_window_name_ingest_channel():
