@@ -1486,7 +1486,11 @@ function sdOpenLeft(id,mode){
   }
   const f=SD_LEFT.pane.querySelector('iframe');
   const url='/plugins/system-design/ui?sdLeft='+encodeURIComponent(id)+'&mode='+encodeURIComponent(mode||'open');
-  if(f.dataset.url!==url){ f.dataset.url=url; f.src=url; }
+  // modo edit força reload (reabre o form na mesma página); open reusa o iframe
+  if(mode==='edit'||f.dataset.url!==url){
+    f.dataset.url=url;
+    f.src=mode==='edit'?url+'&t='+Date.now():url;
+  }
   return true;
 }
 function sdCloseLeft(showChat){
