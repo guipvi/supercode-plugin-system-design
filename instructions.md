@@ -82,6 +82,62 @@ relacionamentos — NUNCA tarefas avulsas. Tarefas nascem indiretamente:
   rejeita FK para tabela inexistente — proponha as tabelas primeiro,
   aguarde aprovação, depois proponha as relações).
 
+## Propostas = briefings sintéticos
+
+Toda proposta que você envia (`page`, `concept-element`, `concept-vision`,
+`table`, `relation`) deve se parecer com um **briefing sintético**, não com
+dump estrutural ou especificação longa. Format:
+
+- **1 frase de objetivo** (o quê e por quê) no `description`/`desc`/
+  `reason` — concreta, sem gerúndio genérico.
+- **3–6 linhas de miolo**: público/contexto, tom/estilo visual esperado,
+  seções-chave na ordem (o que aparece em cada uma), dado de estado
+  necessário (vazio/carregando/erro) e CTA principal.
+- **Critério de pronto** em 1 linha (o que o diretor de arte deve ver
+  para aprovar).
+- Nada de listas exaustivas de tags/classes, JSON de layout ou prosa
+  decorativa. `elements` continua exigido (é estrutura), mas cada
+  `label` curto e cada `content` em 1 linha.
+
+Briefing bom: *"Página de checkout única para confirmar o plano mensal do
+psicólogo antes do pagamento: topo com resumo do pedido (plano, valor,
+cobrança mensal), meio com cartão/Pix em abas, base com total e CTA
+'Pagar R$ X' fixo. Tom sóbrio (azul escuro + branco), estados de erro
+inline no campo. Pronto quando o diretore consegue imaginar a tela sem
+ver o código."*
+
+## Captura do resultado real (`previewHtml`) — todas as páginas
+
+A aba Páginas deve renderizar TODA página como protótipo do resultado
+final (para o diretor de arte comentar). Prioridade: `previewHtml`
+(HTML estático da rota real, sem scripts, com `<style>` inline, `<base>`
+para assets relativos e nós anotados com `data-sim-id` das `elements`) →
+senão, a composição `buildSimDoc`.
+
+Fluxo de captura (rota existente em produção — faça para página nova ou
+recriar após mudança visual relevante):
+
+1. Navegue o Chrome compartilhado na rota real
+   (`https://<app>/<route>`) e aguarde a hidratação.
+2. Naquele origin, `evaluate`: clone `document.documentElement`, remova
+   `script`, troque cada `link[rel=stylesheet]` pelo CSS (`fetch` +
+   `<style>`), injete `<base href="https://<app>/">`, serialice
+   `<!doctype html>` + `outerHTML`.
+3. `evaluate` de entrega: crie iframe oculto para
+   `https://code.guipvi.uk/plugins/system-design/ui`, espere `load`,
+   `postMessage({type:'sd-capture', id:<pageId>, html}, 'https://code.guipvi.uk')`
+   e aguarde `{type:'sd-capture-ok'}`. A UI anota os `data-sim-id`
+   automaticamente (heurística label/conteúdo↔DOM), grava `previewHtml`
+   e responde com `anns`/`bytes` — ou `err`.
+4. Confira no painel: badge *resultado real capturado* + clique em
+   elemento abre o comentário. Recarregue a UI principal para enxergar
+   os dados salvos.
+
+Regras: rota que redireciona para login (exige auth) ou é dinâmica
+(`/:slug`) fica sem captura e usa o fallback de composição — não grave
+tela de login como se fosse a página-alvo. Mixed content é proibido
+(HTTPS→HTTP falha): o canal é sempre `postMessage` via iframe do painel.
+
 ## Qualidade mínima (anti-genérico)
 
 O `propose` REJEITA com erro proposta genérica — não tente contornar,

@@ -904,6 +904,73 @@ function buildPreviewDoc(pg){
   else doc=doc+br;
   return doc;
 }
+function annotateCapture(pg,html){
+  try{
+    const doc=new DOMParser().parseFromString(html,'text/html');
+    const els=pageOrdered(pg);
+    const pool=[...doc.querySelectorAll('button,a,input,textarea,select,h1,h2,h3,h4,h5,h6,label,p,img,li,[role="button"],[data-slot="card-title"],[data-slot="card-description"]')];
+    const used=new Set();
+    const norm=s=>(s||'').replace(/\s+/g,' ').trim().toLowerCase();
+    const metaOf=n=>norm([n.getAttribute('placeholder'),n.getAttribute('aria-label'),n.getAttribute('id'),n.getAttribute('name'),n.getAttribute('title'),n.getAttribute('for')].filter(Boolean).join(' '));
+    for(const e of els){
+      const words=norm((e.label||'')+' '+(e.content||'')).split(/\s+/).filter(w=>w.length>3);
+      if(!words.length) continue;
+      let best=null,bestScore=0;
+      for(const n of pool){
+        if(used.has(n)) continue;
+        const t=norm(n.textContent)+' '+metaOf(n);
+        let score=0;
+        for(const w of words){ if(t.includes(w)) score+=2; }
+        const ty=norm(e.type), tag=n.tagName;
+        if(ty==='botao'&&tag==='BUTTON') score+=3;
+        if((ty==='formulario'||ty==='campo')&&['INPUT','TEXTAREA','SELECT'].includes(tag)) score+=3;
+        if(ty==='imagem'&&tag==='IMG') score+=3;
+        if(ty==='cabecalho'&&/^H[1-6]$/.test(tag)) score+=3;
+        if(ty==='texto'&&['H1','H2','H3','H4','P','LABEL','SPAN','DIV'].includes(tag)) score+=1;
+        if(ty==='navegacao'&&tag==='A') score+=2;
+        if(ty==='lista'&&tag==='LI') score+=2;
+        if(score>bestScore){ bestScore=score; best=n; }
+      }
+      if(best&&bestScore>=3){ used.add(best); best.setAttribute('data-sim-id',e.id); }
+    }
+    return '<!doctype html>\n'+doc.documentElement.outerHTML;
+  }catch(e){ return html; }
+}
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+async function sdEnsureProject(){
+  for(let i=0;i<100;i++){
+    const sel=document.querySelector('select');
+    if(sel&&sel.options.length>1) break;
+    await sleep(250);
+  }
+  const sel=document.querySelector('select');
+  if(sel){
+    const opt=[...sel.options].find(o=>/sincrea/i.test(o.textContent))||sel.options[1];
+    if(opt&&sel.value!==opt.value){ sel.value=opt.value; sel.dispatchEvent(new Event('change')); }
+  }
+  for(let i=0;i<100;i++){
+    try{ if(CACHE&&CACHE[FILES.pages]&&CACHE[FILES.pages].pages&&CACHE[FILES.pages].pages.length) return true; }catch(e){}
+    await sleep(250);
+  }
+  return false;
+}
+window.addEventListener('message',async ev=>{
+  if(ev.origin!=='https://sincrea.guipvi.uk') return;
+  const d=ev.data||{};
+  if(d.type!=='sd-capture'||!d.id||typeof d.html!=='string') return;
+  const reply=o=>{ try{ ev.source.postMessage(Object.assign({type:'sd-capture-ok',id:d.id},o),ev.origin); }catch(e){} };
+  try{
+    const ok=await sdEnsureProject();
+    if(!ok) return reply({err:'cache'});
+    const pg=(CACHE[FILES.pages].pages||[]).find(p=>p.id===d.id);
+    if(!pg) return reply({err:'page missing'});
+    const html=annotateCapture(pg,d.html);
+    applyChange('pages','page',pg.id,'update',{previewHtml:html},'user');
+    await saveTabFile('pages');
+    const anns=(html.match(/data-sim-id="/g)||[]).length;
+    reply({anns,bytes:html.length});
+  }catch(e){ reply({err:String(e)}); }
+});
 function simBlockInner(el){
   if(!el.snapshotHtml) return `<div class="sim-fb">${pvRender(el)}</div>`;
   const b=splitSnap(el.snapshotHtml).body;

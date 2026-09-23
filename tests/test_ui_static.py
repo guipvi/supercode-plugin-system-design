@@ -186,3 +186,14 @@ def test_preview_capture_elements_are_clickable():
     assert "querySelectorAll('[data-sim-id]')" in html
     assert "[data-sim-id]:hover" in html
     assert "[data-sim-id].sim-selected" in html
+
+
+def test_sd_capture_receiver_and_annotate():
+    """Captura em massa: UI recebe {type:'sd-capture'} via postMessage
+    apenas do origin do app real, anota data-sim-id e persiste previewHtml."""
+    html = read_ui()
+    assert "function annotateCapture(" in html
+    assert "ev.origin!=='https://sincrea.guipvi.uk'" in html
+    assert "d.type!=='sd-capture'" in html
+    assert "sd-capture-ok" in html
+    assert "previewHtml:html" in html
