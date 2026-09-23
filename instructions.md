@@ -154,6 +154,25 @@ abas (popup bloqueado) e `window.name` cross-origin (navegador limpa).
 Válido: acumular same-origin em `window.name` + jump no hash
 (existe também o receiver `sd-capture` via `postMessage`, reserva).
 
+## Interface dockada na coluna esquerda (v1.9.11+)
+
+Aba **Páginas** → *abrir*/*editar* ancoram a interface na **coluna
+esquerda do painel (o lugar do chat)**, não no detalhe inline/modal da
+lista: o plugin é same-origin com `code.guipvi.uk` e injeta um pane
+`#frame-sd-left` (iframe irmão de `#frame-vnc`) dentro de `#content`.
+Como é um iframe irmão same-origin, **só recarrega a URL irmã — nunca
+chame `switchView` nem altere `#frame-vnc.src` de dentro do plugin**
+(apague só o próprio pane). Estados do 💬 (`#btn-chat-toggle`, rebind
+guardado em `SD_LEFT.toggle`): interface aberta → 1º toque devolve o
+chat (interface some) → 2º fecha tudo (`content display:none`) → volta
+ao ciclo normal; navegar em `a[data-view]` fecha a interface. Modo
+embed: `?sdLeft=<id>&mode=open|edit` → `body.sd-embed` mostra só
+`#page-detail`; *editar* força reload com `&t=` (cache-buster) para
+reabrir o form na mesma página. `saveTabFile` chama `sdNotifyPeer()`
+→ `postMessage {sdSync:1}` (debounce 400ms → `reloadAll()`) sincroniza
+a irmã; medições cruzadas não leem `CACHE`/`FILES` da outra janela
+(são `const` lexicais, fora do `window`).
+
 ## Qualidade mínima (anti-genérico)
 
 O `propose` REJEITA com erro proposta genérica — não tente contornar,
