@@ -175,3 +175,14 @@ def test_page_preview_html_real_capture():
     assert "previewHtml:$('m-preview').value" in html
     assert "resultado real capturado" in html
     assert "o.previewHtml=vStr" in html
+
+
+def test_preview_capture_elements_are_clickable():
+    """Nós anotados com data-sim-id no preview real: clique seleciona
+    (postMessage select) e o bridge destaca hover/seleção em qualquer nó,
+    não só em .sim-block da simulação montada."""
+    html = read_ui()
+    assert "closest('[data-sim-id]')" in html
+    assert "querySelectorAll('[data-sim-id]')" in html
+    assert "[data-sim-id]:hover" in html
+    assert "[data-sim-id].sim-selected" in html
