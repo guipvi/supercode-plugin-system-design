@@ -47,6 +47,24 @@ def test_tutorial_rule():
         assert token in text, f"regra tutorial ausente: {token}"
 
 
+def test_execution_updates_status_directly():
+    """Conforme executa, o agente move o card DIRETO (task_update, sem
+    aguardar aprovação) e usa a matriz real — nunca o status 'done'."""
+    text = read_instructions()
+    start = text.index("## Execução e status")
+    end = text.index("\n## ", start + 1)
+    sec = text[start:end]
+    assert "system_design_task_update" in sec
+    assert '{"status":"doing"}' in sec
+    assert '{"status":"executado"}' in sec
+    assert '{"status":"backlog"}' in sec
+    assert "aguarde aprovação" not in sec
+    assert "backlog|doing|done" not in text
+    assert "`done`" not in text
+    # exceção única da regra de ouro: task_update direto
+    assert "Exceção única" in text
+
+
 def test_columns_in_create():
     text = read_instructions()
     assert "columns: [{name" in text

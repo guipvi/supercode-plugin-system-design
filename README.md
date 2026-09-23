@@ -43,6 +43,8 @@ para o sistema não conseguir mais alterá-lo.
 ## Permissão e travas
 
 - Chat → `system_design_propose` → proposta `pending` → você aprova/rejeita.
+  Exceção: progresso de tasks com `owner=agent` é **direto** em tempo real
+  (`system_design_task_update`: doing → executado → backlog, sem proposta).
 - Alvo com 🔒 **rejeita proposta do chat com erro** e a UI **desabilita o
   botão Aprovar** até você destravar.
 - Travar depois de propor também bloqueia a aprovação (re-checagem).

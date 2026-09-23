@@ -8,6 +8,9 @@ plugin (projeto conceitual, sprint, páginas, tabelas, propostas).
 - Você NUNCA escreve direto nos arquivos `.opencode/system-design/*.json`
   (sem `Edit`/`Write`/`Bash` nesses arquivos).
 - Toda mudança vira PROPOSTA via `system_design_propose` (status `pending`).
+  **Exceção única**: tasks com `owner=agent` você atualiza DIRETO com
+  `system_design_task_update` (status/prioridade/desc — ver “Execução e
+  status”); assim mesmo NUNCA toque nos `.json` na mão.
 - O usuário aprova ou rejeita cada proposta pela UI do plugin.
 - A aba **projeto conceitual SEMPRE exige proposta+aprovação**.
 - Não existem travas: nada fica bloqueado. O usuário pode reescrever
@@ -27,9 +30,11 @@ plugin (projeto conceitual, sprint, páginas, tabelas, propostas).
 
 - `concept-element`: create|update|delete — elemento de interface/página/função/algoritmo.
 - `concept-vision`: update — visão (objetivo, público, escopo, não-objetivos).
-- `sprint-task`: update|move|delete — `status` em backlog|doing|done
-  (progresso e correções; `create` é rejeitado: tarefas nascem de
-  aprovações, nunca avulsas).
+- `sprint-task`: update|move|delete — `status` em backlog|doing|executado|solicitacao_testes|aguardando_aprovacao
+  (progresso e correções; nas tasks suas — `owner=agent` — mova DIRETO
+  com `system_design_task_update`, sem proposta e sem aguardar aprovação;
+  proposta de status só para `owner=user`. `create` é rejeitado: tarefas
+  nascem de aprovações, nunca avulsas).
 - `page`: create|update|delete. `previewHtml` (update) aceita a captura
   estática do resultado final da rota (HTML sem scripts + CSS inline) —
   quando presente, a aba Páginas mostra esse preview na simulação em vez
@@ -70,14 +75,15 @@ relacionamentos — NUNCA tarefas avulsas. Tarefas nascem indiretamente:
 - `sprint-task` em `create` é REJEITADO sempre: embuta o trabalho na
   origem (crie a origem com `tasks`, ou proponha `update` adicionando
   `tasks` à origem aprovada).
-- `status` pode vir `done` com evidência quando o repo já executa
+- `status` pode vir `executado` com evidência quando o repo já executa
   (sistemas existentes): cheque o código e cite a evidência no
   `desc`/`reason` (arquivo, teste, migração).
 - Aprovar a origem cria as tasks na sprint com `origin` registrada
   (tab/kind/id/título) — sem carta separada, sem nova aprovação.
   Títulos duplicados são ignorados.
-- Movimentação e correção (`update`/`move`/`delete` em `sprint-task`)
-  continuam valendo para relatar progresso e corrigir.
+- Movimentação e correção valem para relatar progresso: tasks suas
+  (`owner=agent`) mova DIRETO com `system_design_task_update`; tasks
+  `owner=user` proponha (`update`/`move`/`delete` em `sprint-task`).
 - `relation` somente após as tabelas existirem aprovadas (o dry-run
   rejeita FK para tabela inexistente — proponha as tabelas primeiro,
   aguarde aprovação, depois proponha as relações).
@@ -210,24 +216,40 @@ Por isso, todo artefato que represente o sistema deve ser REGISTRADO:
   tools MCP estiverem indisponíveis, AVISE o usuário e aguarde — nunca
   despeje o conteúdo num arquivo solto "para depois".
 
-## Execução e status (aprovação vira trabalho)
+## Execução e status (atualize o card conforme executa)
 
-Aprovar NÃO executa: só registra (e materializa as tarefas na sprint).
-O trabalho acontece assim:
+Aprovar uma ORIGEM materializa as tasks na sprint; executar a task é
+SEU trabalho — e o card deve espelhar o status **na hora, direto, sem
+proposta e sem aguardar aprovação** (apenas tasks `owner=agent`; matriz
+em “Colunas e matriz de movimento”):
 
-1. Quando o usuário pedir para executar (ex.: "execute a tarefa X" ou
-   colar o prompt do botão "executar no chat"), leia a tarefa com
-   `system_design_get(project, "sprint")` — filtre por origem/status
-   como o usuário faria na UI.
-2. Proponha `sprint-task` action `move` para `doing` e aguarde aprovação.
+1. Ao aceitar/executar uma task: `system_design_get(project, "sprint")`
+   para achar o `task_id` e conferir `owner`/`status` atuais (filtre por
+   origem/status como a UI faria).
+2. ANTES de mexer no repo:
+   `system_design_task_update(project, task_id, '{"status":"doing"}')`
+   — o card vai para “Executando” e o usuário vê em tempo real.
 3. Faça o trabalho de verdade no repo (código, migração, doc — o que a
    tarefa mandar), sem atalhos.
-4. Proponha `move` para `done` + uma proposta `page-comment`
-   (action `comment`) na página/elemento afetado com o resumo do que foi
-   feito (arquivos, comandos de verificação).
-5. Se emperrar, NÃO fique em silêncio: proponha `move` de volta para
-   `backlog` com o motivo em `reason` e explique ao usuário. O usuário
-   também pode reescrever a tarefa e movê-la de volta quando quiser.
+4. Ao concluir e verificar:
+   `system_design_task_update(project, task_id, '{"status":"executado"}')`
+   — o dono vira `user` automaticamente. Se o trabalho representar o
+   sistema (artefato/mudança visível), registre o resumo numa proposta
+   `page-comment` (action `comment`) na página/elemento afetado com
+   arquivos e comandos de verificação.
+5. Se emperrar, bloquear ou abandonar:
+   `system_design_task_update(project, task_id, '{"status":"backlog"}')`
+   com o motivo em `desc` — NUNCA deixe o card em `doing` sem estar
+   executando, e NUNCA fique em silêncio: explique o que falhou.
+6. Task com `owner=user`: NÃO edite status — proponha
+   (`system_design_propose`) ou peça ao usuário. Após `executado` o dono
+   já é o usuário (só ele move para `solicitacao_testes`).
+7. Tools MCP `system_design_*` ausentes nesta sessão: AVISE o usuário e
+   aguarde — não simule status nem escreva `.json`.
+
+Cada etapa visível (início, conclusão, bloqueio) atualiza o card na
+mesma hora. “Conforme executa” = essas chamadas diretas; espera de
+aprovação só entra para origens/conceito e para tasks do usuário.
 
 ## Relatório de status (dizer o que foi executado)
 
@@ -235,7 +257,7 @@ Quando o usuário perguntar "o que já foi feito / está em execução",
 NUNCA responda de memória: leia na hora `system_design_get` das 4 abas
 + `system_design_list_proposals(project, "all")` e responda com números
 exatos: aprovadas aplicadas (por aba), pendentes aguardando avaliação,
-rejeitadas, tarefas por status (backlog/doing/done) e o próximo passo
+rejeitadas, tarefas por status (backlog/doing/executado) e o próximo passo
 concreto. Sem leitura, sem resposta. Na sprint, filtre por origem
 (tab/kind), status e prioridade como a UI faz.
 
