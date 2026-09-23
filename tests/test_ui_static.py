@@ -200,11 +200,15 @@ def test_sd_capture_receiver_and_annotate():
 
 
 def test_window_name_ingest_channel():
-    """Canal principal de captura em massa: window.name 'SDCAP2|' + JSON
-    acumula capturas cross-origin e o boot() ingere autenticado
-    (iframe de terceiros não leva o cookie SameSite)."""
+    """Canal principal de captura em massa: acumulador same-origin
+    'SDCAP2|' + JSON no window.name e entrega por navegação top-level
+    com hash '#sd=' (gzip+base64); iframe de terceiros nao leva cookie
+    SameSite e window.name morre no cross-origin."""
     html = read_ui()
     assert "function sdIngestName(" in html
     assert "SDCAP2|" in html
     assert "sdIngestName().catch" in html
     assert "window.__sdIngest" in html
+    assert "#sd=" in html
+    assert "function sdGunzipB64(" in html
+    assert "DecompressionStream" in html

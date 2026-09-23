@@ -971,13 +971,32 @@ window.addEventListener('message',async ev=>{
     reply({anns,bytes:html.length});
   }catch(e){ reply({err:String(e)}); }
 });
+async function sdGunzipB64(b64){
+  const bin=atob(b64); const u=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i);
+  const ds=new DecompressionStream('gzip');
+  const st=new Blob([u]).stream().pipeThrough(ds);
+  return await new Response(st).text();
+}
+function sdEntriesFromUrl(){
+  const h=location.hash||'';
+  if(h.indexOf('#sd=')===0){
+    try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){}
+    try{ return {ok:true,entries:JSON.parse(decodeURIComponent(h.slice(4)))||[]}; }catch(e){ return {ok:false,err:'hash:'+e.message}; }
+  }
+  const n=window.name||'';
+  if(n.indexOf('SDCAP2|')===0){
+    window.name='';
+    try{ return {ok:true,entries:JSON.parse(n.slice(7))||[]}; }catch(e){ return {ok:false,err:'name:'+e.message}; }
+  }
+  return {ok:true,entries:[]};
+}
 async function sdIngestName(){
   try{
-    const n=window.name||'';
-    if(n.indexOf('SDCAP2|')!==0) return false;
-    let entries=[];
-    try{ entries=JSON.parse(n.slice(7))||[]; }catch(e){ entries=[]; }
+    const src=sdEntriesFromUrl();
+    const entries=src.entries||[];
     window.name='';
+    if(!src.ok){ window.__sdIngest={err:src.err}; return false; }
     if(!entries.length) return false;
     const sel=$('project');
     if(sel){
@@ -991,8 +1010,12 @@ async function sdIngestName(){
       const pg=(pages.pages||[]).find(p=>p.id===e.id);
       if(!pg){ errs.push(e.id+':sem-pagina'); continue; }
       try{
-        const html=annotateCapture(pg,e.html);
-        applyChange('pages','page',pg.id,'update',{previewHtml:html},'user');
+        let html='';
+        if(e.gz) html=await sdGunzipB64(e.gz);
+        else html=e.html||'';
+        if(!html){ errs.push(e.id+':vazio'); continue; }
+        const out=annotateCapture(pg,html);
+        applyChange('pages','page',pg.id,'update',{previewHtml:out},'user');
         ok++;
       }catch(ex){ errs.push(e.id+':'+String(ex)); }
     }
