@@ -122,27 +122,30 @@ recriar após mudança visual relevante):
 2. Naquele origin, `evaluate`: clone `document.documentElement`, remova
    `script`, troque cada `link[rel=stylesheet]` pelo CSS (`fetch` +
    `<style>`), injete `<base href="https://<app>/">`, serialice
-   `<!doctype html>` + `outerHTML` e **acrescente** ao `window.name`
-   acumulador `SDCAP2|` + `JSON.stringify([{id,html},...])` (o
-   `window.name` persiste entre navegações cross-origin — dá para
-   capturar várias rotas seguidas sem ir ao painel a cada uma).
-3. Termine indo **top-level** para a UI do painel
-   (`https://<host>/plugins/system-design/ui`): o `boot()` chama
-   `sdIngestName()`, que anota os `data-sim-id` automaticamente
-   (heurística label/conteúdo↔DOM), grava `previewHtml` de cada página,
-   limpa o `window.name` e mostra o toast *Capturas ingeridas*.
-   Confirme com um `evaluate` lendo `window.__sdIngest`
-   (`{total, ok, errs, ids}`) e o badge *resultado real capturado*.
-4. Recarregue a UI principal (já aberta em outra aba) para enxergar os
-   dados salvos.
+   `<!doctype html>` + `outerHTML`, comprima (gzip+base64) e **acrescente**
+   ao acumulador `window.name` `SDCAP2|` + `JSON.stringify([{id,gz},...])`
+   — o `window.name` persiste entre navegações **same-origin** (dá para
+   capturar várias rotas seguidas sem ir ao painel; ~800KB testados ok).
+3. Entrega por **navegação top-level com hash** (o hash fica no cliente,
+   não vai ao servidor): `location.href = '<host>/plugins/system-design/ui#sd=' +
+   encodeURIComponent(JSON.stringify(entries))`. No `boot()`,
+   `sdIngestName()` lê `#sd=` (fallback: `SDCAP2|` no `window.name`),
+   faz gunzip de cada `gz`, anota os `data-sim-id` (heurística
+   label/conteúdo↔DOM), grava `previewHtml`, limpa hash+name, mostra o
+   toast *Capturas ingeridas* e expõe `window.__sdIngest`
+   (`{total, ok, errs, ids}`).
+4. Confirme com `evaluate` lendo `window.__sdIngest` e o badge
+   *resultado real capturado*; recarregue a UI principal (outra aba)
+   para enxergar os dados salvos.
 
 Regras: rota que redireciona para login (exige auth) ou é dinâmica
 (`/:slug`) fica sem captura e usa o fallback de composição — não grave
-tela de login como se fosse a página-alvo. Não tente enviar a captura
-por `fetch`/iframe de terceiros: HTTPS→HTTP falha por mixed content e o
-cookie de sessão não vai em iframe de terceiros (SameSite) — o canal é
-`window.name` + ingest no boot autenticado (existe também o receiver
-`sd-capture` via `postMessage`, reserva).
+tela de login como se fosse a página-alvo. Canais testados e FIRMES:
+`fetch` HTTPS→HTTP (mixed content), iframe de terceiros (cookie
+SameSite não vai → API sem sessão), `window.open`/`postMessage` entre
+abas (popup bloqueado) e `window.name` cross-origin (navegador limpa).
+Válido: acumular same-origin em `window.name` + jump no hash
+(existe também o receiver `sd-capture` via `postMessage`, reserva).
 
 ## Qualidade mínima (anti-genérico)
 
