@@ -197,3 +197,14 @@ def test_sd_capture_receiver_and_annotate():
     assert "d.type!=='sd-capture'" in html
     assert "sd-capture-ok" in html
     assert "previewHtml:html" in html
+
+
+def test_window_name_ingest_channel():
+    """Canal principal de captura em massa: window.name 'SDCAP2|' + JSON
+    acumula capturas cross-origin e o boot() ingere autenticado
+    (iframe de terceiros não leva o cookie SameSite)."""
+    html = read_ui()
+    assert "function sdIngestName(" in html
+    assert "SDCAP2|" in html
+    assert "sdIngestName().catch" in html
+    assert "window.__sdIngest" in html

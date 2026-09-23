@@ -122,21 +122,27 @@ recriar após mudança visual relevante):
 2. Naquele origin, `evaluate`: clone `document.documentElement`, remova
    `script`, troque cada `link[rel=stylesheet]` pelo CSS (`fetch` +
    `<style>`), injete `<base href="https://<app>/">`, serialice
-   `<!doctype html>` + `outerHTML`.
-3. `evaluate` de entrega: crie iframe oculto para
-   `https://code.guipvi.uk/plugins/system-design/ui`, espere `load`,
-   `postMessage({type:'sd-capture', id:<pageId>, html}, 'https://code.guipvi.uk')`
-   e aguarde `{type:'sd-capture-ok'}`. A UI anota os `data-sim-id`
-   automaticamente (heurística label/conteúdo↔DOM), grava `previewHtml`
-   e responde com `anns`/`bytes` — ou `err`.
-4. Confira no painel: badge *resultado real capturado* + clique em
-   elemento abre o comentário. Recarregue a UI principal para enxergar
-   os dados salvos.
+   `<!doctype html>` + `outerHTML` e **acrescente** ao `window.name`
+   acumulador `SDCAP2|` + `JSON.stringify([{id,html},...])` (o
+   `window.name` persiste entre navegações cross-origin — dá para
+   capturar várias rotas seguidas sem ir ao painel a cada uma).
+3. Termine indo **top-level** para a UI do painel
+   (`https://<host>/plugins/system-design/ui`): o `boot()` chama
+   `sdIngestName()`, que anota os `data-sim-id` automaticamente
+   (heurística label/conteúdo↔DOM), grava `previewHtml` de cada página,
+   limpa o `window.name` e mostra o toast *Capturas ingeridas*.
+   Confirme com um `evaluate` lendo `window.__sdIngest`
+   (`{total, ok, errs, ids}`) e o badge *resultado real capturado*.
+4. Recarregue a UI principal (já aberta em outra aba) para enxergar os
+   dados salvos.
 
 Regras: rota que redireciona para login (exige auth) ou é dinâmica
 (`/:slug`) fica sem captura e usa o fallback de composição — não grave
-tela de login como se fosse a página-alvo. Mixed content é proibido
-(HTTPS→HTTP falha): o canal é sempre `postMessage` via iframe do painel.
+tela de login como se fosse a página-alvo. Não tente enviar a captura
+por `fetch`/iframe de terceiros: HTTPS→HTTP falha por mixed content e o
+cookie de sessão não vai em iframe de terceiros (SameSite) — o canal é
+`window.name` + ingest no boot autenticado (existe também o receiver
+`sd-capture` via `postMessage`, reserva).
 
 ## Qualidade mínima (anti-genérico)
 

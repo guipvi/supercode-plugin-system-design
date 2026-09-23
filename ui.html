@@ -971,6 +971,37 @@ window.addEventListener('message',async ev=>{
     reply({anns,bytes:html.length});
   }catch(e){ reply({err:String(e)}); }
 });
+async function sdIngestName(){
+  try{
+    const n=window.name||'';
+    if(n.indexOf('SDCAP2|')!==0) return false;
+    let entries=[];
+    try{ entries=JSON.parse(n.slice(7))||[]; }catch(e){ entries=[]; }
+    window.name='';
+    if(!entries.length) return false;
+    const sel=$('project');
+    if(sel){
+      const opt=[...sel.options].find(o=>/sincrea/i.test((o.value||'')+' '+(o.textContent||'')));
+      if(opt&&sel.value!==opt.value){ PROJECT=opt.value; sel.value=opt.value; await reloadAll(); }
+    }
+    if(!CACHE||!CACHE[FILES.pages]||!CACHE[FILES.pages].pages){ await reloadAll(); }
+    const pages=CACHE[FILES.pages];
+    let ok=0; const errs=[];
+    for(const e of entries){
+      const pg=(pages.pages||[]).find(p=>p.id===e.id);
+      if(!pg){ errs.push(e.id+':sem-pagina'); continue; }
+      try{
+        const html=annotateCapture(pg,e.html);
+        applyChange('pages','page',pg.id,'update',{previewHtml:html},'user');
+        ok++;
+      }catch(ex){ errs.push(e.id+':'+String(ex)); }
+    }
+    if(ok){ await saveTabFile('pages'); renderAll(); }
+    window.__sdIngest={total:entries.length,ok,errs,ids:entries.map(e=>e.id)};
+    msg(ok?('Capturas ingeridas: '+ok+'/'+entries.length+(errs.length?' · erros: '+errs.join(', '):'')):'Nenhuma captura aplicada', !!ok);
+    return true;
+  }catch(e){ window.__sdIngest={err:String(e)}; msg('Ingest de captura falhou: '+(e&&e.message||e),false); return false; }
+}
 function simBlockInner(el){
   if(!el.snapshotHtml) return `<div class="sim-fb">${pvRender(el)}</div>`;
   const b=splitSnap(el.snapshotHtml).body;
@@ -1327,8 +1358,9 @@ async function loadProjects(){
 }
 async function boot(){
   await loadProjects();
-  if(!PROJECT){ $('proj-meta').textContent='crie um projeto em /projetos para começar'; return; }
+  if(!PROJECT){ $('proj-meta').textContent='crie um projeto em /projetos para começar'; sdIngestName().catch(()=>{}); return; }
   await reloadAll();
+  sdIngestName().catch(()=>{});
 }
 async function reloadAll(){
   if(!PROJECT) return;
