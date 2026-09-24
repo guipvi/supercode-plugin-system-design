@@ -80,6 +80,8 @@ relacionamentos — NUNCA tarefas avulsas. Tarefas nascem indiretamente:
   `desc`/`reason` (arquivo, teste, migração).
 - Aprovar a origem cria as tasks na sprint com `origin` registrada
   (tab/kind/id/título) — sem carta separada, sem nova aprovação.
+  `questions`, `owner` e `afterAnswer` embutidos são preservados: o
+  formulário do usuário aparece no card da tarefa (v1.9.14).
   Títulos duplicados são ignorados.
 - Movimentação e correção valem para relatar progresso: tasks suas
   (`owner=agent`) mova DIRETO com `system_design_task_update`; tasks

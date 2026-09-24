@@ -603,7 +603,7 @@ function applyChange(tab,kind,tid,action,payload,actor){
 function vId(id){ if(!ID_RE.test(id)) throw new Error('id invalido'); return id; }
 let SPRINT_DIRTY=false;
 function vQuestion(q,i){ if(typeof q==='string') q={question:q}; if(!q||typeof q!=='object') throw new Error('pergunta invalida'); const qtype=q.type||'text'; if(!['text','choice','yesno'].includes(qtype)) throw new Error('tipo de pergunta invalido'); let options=[]; if(qtype==='choice'){ if(!Array.isArray(q.options)||!q.options.length) throw new Error('choice exige options'); options=q.options.map(o=>vStr(o,'option',200)).slice(0,10); } let ans=(q.answer==null?'':String(q.answer)); if(ans&&qtype==='choice'&&!options.includes(ans)) throw new Error('resposta fora das opcoes'); return {id:ID_RE.test(String(q.id||''))?String(q.id):('q'+((i||0)+1)),question:vStr(q.question,'question',500),type:qtype,options,answer:ans}; }
-function vTaskBrief(it){ if(!it||typeof it!=='object') throw new Error('tarefa implicada invalida'); return {title:vStr(it.title,'task.title',200),desc:vStr(it.desc,'task.desc',5000,false),priority:vEnum(it.priority,'task.priority',ENUMS.priority,'media'),status:vEnum(it.status,'task.status',ENUMS.status,'backlog')}; }
+function vTaskBrief(it){ if(!it||typeof it!=='object') throw new Error('tarefa implicada invalida'); const b={title:vStr(it.title,'task.title',200),desc:vStr(it.desc,'task.desc',5000,false),priority:vEnum(it.priority,'task.priority',ENUMS.priority,'media'),status:vEnum(it.status,'task.status',ENUMS.status,'backlog')}; if(it.owner==='user'||it.owner==='agent') b.owner=it.owner; if(it.afterAnswer==='solicitacao_testes'||it.afterAnswer==='executado') b.afterAnswer=it.afterAnswer; if(Array.isArray(it.questions)) b.questions=it.questions.map((q,i)=>vQuestion(q,i)); return b; }
 function parseTaskLines(txt){ return String(txt||'').split('\n').map(s=>s.trim()).filter(Boolean).map(line=>{ const parts=line.split('|').map(s=>s.trim()); const st=(parts[2]||'backlog').toLowerCase(); return {title:parts[0],desc:parts[1]||'',status:['backlog','doing','done'].includes(st)?st:'backlog'}; }); }
 /* Aprovar conceito = aprovar o pacote: tarefas embutidas viram sprint (sem carta separada) */
 function spawnImpliedTasksUI(el,actor){
@@ -616,7 +616,8 @@ function spawnImpliedTasksUI(el,actor){
     const title=String(it.title||'').trim();
     if(!title||existing.has(title.toLowerCase())) continue;
     const now=new Date().toISOString();
-    tasks.push({id:vId(it.id||uid('t')),title:title.slice(0,200),desc:String(it.desc||'').slice(0,5000),priority:ENUMS.priority.includes(it.priority)?it.priority:'media',status:ENUMS.status.includes(it.status)?it.status:'backlog',createdBy:actor+':conceito',createdAt:now,updatedBy:actor,updatedAt:now});
+    const st=ENUMS.status.includes(it.status)?it.status:'backlog';
+    tasks.push({id:vId(it.id||uid('t')),title:title.slice(0,200),desc:String(it.desc||'').slice(0,5000),priority:ENUMS.priority.includes(it.priority)?it.priority:'media',status:st,owner:(it.owner==='user'||it.owner==='agent')?it.owner:autoOwner(st),afterAnswer:(it.afterAnswer==='solicitacao_testes'||it.afterAnswer==='executado')?it.afterAnswer:'executado',questions:Array.isArray(it.questions)?it.questions.map((q,i)=>vQuestion(q,i)):[],createdBy:actor+':conceito',createdAt:now,updatedBy:actor,updatedAt:now});
     existing.add(title.toLowerCase()); created.push(tasks[tasks.length-1]);
   }
   if(created.length) SPRINT_DIRTY=true;

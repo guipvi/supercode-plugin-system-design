@@ -71,3 +71,23 @@ def test_grapes_somente_sob_clique():
     # loadGrapes não pode ser chamado no boot
     boot = js[js.index("async function boot()"):]
     assert "loadGrapes" not in boot
+
+
+def _fn_body(js, name):
+    start = js.index(f"function {name}(")
+    end = js.index("\n}", start)
+    return js[start:end]
+
+
+def test_spawn_implied_tasks_preserva_forms():
+    """Regressão v1.9.14: aprovar origem com tasks embutidas precisa levar
+    questions/owner/afterAnswer para a sprint. Antes o spawn descartava esses
+    campos e os formulários do usuário sumiam da sprint (só restavam em
+    proposals.json)."""
+    _, js = parts()
+    for fn in ("vTaskBrief", "spawnImpliedTasksUI"):
+        body = _fn_body(js, fn)
+        for field in ("questions", "owner", "afterAnswer"):
+            assert field in body, f"{fn} descarta {field}"
+    spawn = _fn_body(js, "spawnImpliedTasksUI")
+    assert "vQuestion" in spawn, "spawn precisa validar as perguntas embutidas"

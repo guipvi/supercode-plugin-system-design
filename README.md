@@ -45,6 +45,9 @@ para o sistema não conseguir mais alterá-lo.
 - Chat → `system_design_propose` → proposta `pending` → você aprova/rejeita.
   Exceção: progresso de tasks com `owner=agent` é **direto** em tempo real
   (`system_design_task_update`: doing → executado → backlog, sem proposta).
+- Aprovar origem com tasks embutidas cria as tarefas na sprint **com
+  perguntas, dono e `afterAnswer` preservados** — os formulários do usuário
+  aparecem no card da tarefa (v1.9.14).
 - Alvo com 🔒 **rejeita proposta do chat com erro** e a UI **desabilita o
   botão Aprovar** até você destravar.
 - Travar depois de propor também bloqueia a aprovação (re-checagem).
